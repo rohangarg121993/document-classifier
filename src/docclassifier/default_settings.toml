@@ -15,6 +15,12 @@ force_ocr = false
 # Embedded PDF text with fewer non-space characters counts as missing, so the page is OCR'd.
 min_native_chars = 20
 
+[cache]
+# Cache OCR results on disk. Entries contain page text (personal data): keep the directory local and
+# git-ignored (ADR-0001).
+enabled = true
+dir = ".cache/ocr"
+
 [classifier]
 # How many candidate categories to report.
 top_n = 3

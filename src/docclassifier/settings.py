@@ -48,13 +48,25 @@ class DecisionSettings:
 
 
 @dataclass(frozen=True)
+class CacheSettings:
+    enabled: bool
+    dir: str
+
+
+@dataclass(frozen=True)
 class Settings:
     ocr: OcrSettings
+    cache: CacheSettings
     classifier: ClassifierSettings
     decision: DecisionSettings
 
 
-_SECTIONS = {"ocr": OcrSettings, "classifier": ClassifierSettings, "decision": DecisionSettings}
+_SECTIONS = {
+    "ocr": OcrSettings,
+    "cache": CacheSettings,
+    "classifier": ClassifierSettings,
+    "decision": DecisionSettings,
+}
 
 
 def load_settings(path: str | Path | None = None) -> Settings:
