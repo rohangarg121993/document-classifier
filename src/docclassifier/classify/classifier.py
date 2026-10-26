@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from docclassifier.classify.categories import Category
+from docclassifier.classify.categories import CategorySet
 from docclassifier.classify.normalize import normalize
 from docclassifier.classify.result import UNCLASSIFIED, Candidate, ClassificationResult
 from docclassifier.ocr.models import PageText
@@ -13,7 +13,7 @@ from docclassifier.settings import Settings
 log = logging.getLogger(__name__)
 
 
-def classify(page: PageText, categories: list[Category], settings: Settings) -> ClassificationResult:
+def classify(page: PageText, categories: CategorySet, settings: Settings) -> ClassificationResult:
     # Padding with spaces turns whole-word matching into a substring test on normalised text.
     text = f" {normalize(page.text)} "
     cap = settings.classifier.keyword_cap
