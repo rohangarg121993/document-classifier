@@ -40,7 +40,9 @@ def classify(page: PageText, categories: CategorySet, settings: Settings) -> Cla
     ranked.sort(key=lambda c: -c.score)
 
     full_text = region_texts["full"]
-    result = decide(ranked, len(full_text.replace(" ", "")), cfg.top_n, categories, settings.decision)
+    result = decide(
+        ranked, len(full_text.replace(" ", "")), cfg.top_n, categories, settings.decision, page.handwriting_suspected
+    )
     # IDs and scores only: page text is personal data and must never reach the logs (ADR-0001).
     log.info(
         "page %s -> %s (%s, confidence %.3f; top: %s)",

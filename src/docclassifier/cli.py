@@ -52,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
         "page": args.page,
         **result.to_dict(),
         "extraction_method": page.method,
+        "ocr_quality": page.ocr_quality,
+        "handwriting_suspected": page.handwriting_suspected,
         "timings_ms": {"extract": _ms(started, extracted), "classify": _ms(extracted, classified)},
     }
     if args.include_text:
