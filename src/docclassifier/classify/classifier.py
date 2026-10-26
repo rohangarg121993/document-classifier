@@ -1,9 +1,14 @@
-"""Scoring: keyword evidence plus profile similarity per page region, then the decision layer.
+"""Scoring: combine independent evidence per category into a strength, then hand over to the decision layer.
 
-For each category and each region (top, middle, bottom thirds and the full page):
-    region score = synonym_weight × synonym evidence + phrase_weight × phrase evidence + similarity_weight × similarity
-The category score is the region-weighted average over regions that have enough text, minus the negative-phrase
-penalty (counted once, on the full page), clipped to [0, 1].
+Evidence model (ADR-0003). Each signal removes part of the remaining doubt, so one strong signal plus
+supporting ones gives a high strength, while a page without evidence stays near zero:
+
+    strength = 1 - (1 - r_syn·synonyms)(1 - r_phr·phrases)(1 - r_sim·similarity) - penalty·negatives
+
+- synonyms: document-type names; one hit is full evidence, weighted by where it appears (a title counts
+  fully only at the top of the page);
+- phrases: content clues; distinct hits weighted by position, specificity and fuzziness, capped;
+- similarity: TF-IDF cosine to the category profile, relative to what a real matching page reaches.
 """
 
 from __future__ import annotations
@@ -15,33 +20,34 @@ from docclassifier.classify.categories import Category, CategorySet
 from docclassifier.classify.decision import decide
 from docclassifier.classify.matching import MatchRules, PageMatcher
 from docclassifier.classify.normalize import normalize
-from docclassifier.classify.regions import REGIONS, split_regions
-from docclassifier.classify.result import Candidate, ClassificationResult, KeywordMatch, RegionScore
+from docclassifier.classify.regions import split_regions
+from docclassifier.classify.result import Candidate, ClassificationResult, KeywordMatch
 from docclassifier.ocr.models import PageText
 from docclassifier.settings import ClassifierSettings, Settings
 
 log = logging.getLogger(__name__)
 
+POSITIONS = ("top", "middle", "bottom")
+
 
 def classify(page: PageText, categories: CategorySet, settings: Settings) -> ClassificationResult:
     cfg = settings.classifier
     rules = MatchRules(cfg.min_prefix_length, cfg.min_fuzzy_length, cfg.fuzzy_threshold)
-    region_texts = {name: normalize(text) for name, text in split_regions(page).items()}
-    # Regions with too little text are skipped; their weight is shared among the others.
-    active = [r for r in REGIONS if len(region_texts[r].replace(" ", "")) >= cfg.min_region_chars] or ["full"]
-    matchers = {r: PageMatcher(region_texts[r], rules) for r in active}
-    similarities = dict(zip(active, categories.similarities([region_texts[r] for r in active])))
+    texts = {name: normalize(text) for name, text in split_regions(page).items()}
+    page_matcher = PageMatcher(texts["full"], rules)
+    position_matchers = {p: PageMatcher(texts[p], rules) for p in POSITIONS}
+    similarities = categories.similarities([texts["full"]])[0]
 
     ranked = [
-        _score(category, index, categories, matchers, similarities, cfg)
-        for index, category in enumerate(categories)
+        _score(category, categories, page_matcher, position_matchers, similarity, cfg)
+        for category, similarity in zip(categories, similarities)
     ]
-    # Highest score first; sort is stable, so ties keep CSV order.
+    # Strongest first; sort is stable, so ties keep CSV order.
     ranked.sort(key=lambda c: -c.score)
 
-    full_text = region_texts["full"]
     result = decide(
-        ranked, len(full_text.replace(" ", "")), cfg.top_n, categories, settings.decision, page.handwriting_suspected
+        ranked, len(texts["full"].replace(" ", "")), cfg.top_n, categories, settings.decision,
+        page.handwriting_suspected,
     )
     # IDs and scores only: page text is personal data and must never reach the logs (ADR-0001).
     log.info(
@@ -54,77 +60,83 @@ def classify(page: PageText, categories: CategorySet, settings: Settings) -> Cla
 
 def _score(
     category: Category,
-    index: int,
     categories: CategorySet,
-    matchers: dict[str, PageMatcher],
-    similarities: dict[str, list[float]],
+    page_matcher: PageMatcher,
+    position_matchers: dict[str, PageMatcher],
+    similarity: float,
     cfg: ClassifierSettings,
 ) -> Candidate:
-    weights = {r: category.region_weights.get(r, getattr(cfg, f"region_weight_{r}")) for r in matchers}
-    total_weight = sum(weights.values()) or 1.0
+    synonym_positions = _position_factors(category, cfg, "synonym")
+    phrase_positions = _position_factors(category, cfg, "phrase")
 
-    regions: dict[str, RegionScore] = {}
-    for region, matcher in matchers.items():
-        synonyms = _matches(category.synonyms, categories, matcher, cfg)
-        phrases = _matches(category.positive_phrases, categories, matcher, cfg)
-        synonym_score, phrase_score = _evidence(synonyms, cfg), _evidence(phrases, cfg)
-        similarity = similarities[region][index]
-        score = cfg.synonym_weight * synonym_score + cfg.phrase_weight * phrase_score + cfg.similarity_weight * similarity
-        regions[region] = RegionScore(
-            weight=round(weights[region] / total_weight, 4),
-            score=round(score, 4),
-            synonym_score=round(synonym_score, 4),
-            phrase_score=round(phrase_score, 4),
-            similarity=round(similarity, 4),
-            matched_synonyms=synonyms,
-            matched_phrases=phrases,
-        )
+    # Synonyms are not discounted for being shared with a sibling: a shared title is still strong evidence
+    # against unrelated categories, and the tie between siblings is resolved by the decision layer.
+    synonyms = _matches(category.synonyms, None, synonym_positions, page_matcher, position_matchers, cfg)
+    phrases = _matches(category.positive_phrases, categories, phrase_positions, page_matcher, position_matchers, cfg)
+    negatives = _matches(category.negative_phrases, None, None, page_matcher, position_matchers, cfg)
 
-    full_matcher = matchers.get("full") or next(iter(matchers.values()))
-    negatives = _matches(category.negative_phrases, None, full_matcher, cfg)
+    synonym_evidence = min(1.0, sum(m.weight for m in synonyms) / cfg.synonym_cap)
+    phrase_evidence = min(1.0, sum(m.weight for m in phrases) / cfg.phrase_cap)
+    similarity_evidence = min(1.0, max(0.0, similarity) / cfg.similarity_full)
+    doubt = (
+        (1 - cfg.synonym_reliability * synonym_evidence)
+        * (1 - cfg.phrase_reliability * phrase_evidence)
+        * (1 - cfg.similarity_reliability * similarity_evidence)
+    )
     penalty = cfg.negative_penalty * len(negatives)
-    weighted = sum(weights[r] * regions[r].score for r in regions) / total_weight
-    full = regions.get("full") or next(iter(regions.values()))
     return Candidate(
         category_id=category.category_id,
         category_name=category.name,
         parent_category=category.parent,
-        score=round(min(1.0, max(0.0, weighted - penalty)), 4),
-        synonym_score=full.synonym_score,
-        phrase_score=full.phrase_score,
-        similarity=full.similarity,
+        score=round(min(1.0, max(0.0, 1 - doubt - penalty)), 4),
+        synonym_score=round(synonym_evidence, 4),
+        phrase_score=round(phrase_evidence, 4),
+        similarity=round(similarity, 4),
         negative_penalty=round(penalty, 4),
-        matched_synonyms=full.matched_synonyms,
-        matched_phrases=full.matched_phrases,
+        matched_synonyms=synonyms,
+        matched_phrases=phrases,
         matched_negatives=negatives,
-        regions=regions,
     )
 
 
+def _position_factors(category: Category, cfg: ClassifierSettings, kind: str) -> dict[str, float]:
+    return {p: category.region_weights.get(p, getattr(cfg, f"{kind}_position_{p}")) for p in POSITIONS}
+
+
 def _matches(
-    keywords: list[str], categories: CategorySet | None, matcher: PageMatcher, cfg: ClassifierSettings
+    keywords: list[str],
+    categories: CategorySet | None,
+    positions: dict[str, float] | None,
+    page_matcher: PageMatcher,
+    position_matchers: dict[str, PageMatcher],
+    cfg: ClassifierSettings,
 ) -> list[KeywordMatch]:
-    """Distinct keyword hits. Specificity applies to positive keywords only (`categories` given)."""
+    """Distinct keyword hits on the page.
+
+    `categories` given: weight by specificity (positive phrases). `positions` given: weight by the best
+    position the keyword appears in; a keyword only found across a region boundary counts as "middle".
+    """
     found: dict[str, KeywordMatch] = {}
     for keyword in keywords:
         key = _normalized_keyword(keyword)
         if key in found:
             continue
-        kind = matcher.match(key)
+        kind = page_matcher.match(key)
         if kind is None:
             continue
         weight = categories.specificity(keyword) if categories is not None else 1.0
         if kind == "fuzzy":
             weight *= cfg.fuzzy_weight
-        found[key] = KeywordMatch(keyword, kind, round(weight, 4))
+        position = "page"
+        if positions is not None:
+            seen = [p for p in POSITIONS if position_matchers[p].match(key)]
+            position = max(seen, key=positions.__getitem__) if seen else "middle"
+            weight *= positions[position]
+        found[key] = KeywordMatch(keyword, kind, round(weight, 4), position)
     return list(found.values())
 
 
 @lru_cache(maxsize=8192)
 def _normalized_keyword(keyword: str) -> str:
-    # Keywords repeat across every page and region; page text is never cached.
+    # Keywords repeat across every page; page text is never cached.
     return normalize(keyword)
-
-
-def _evidence(matches: list[KeywordMatch], cfg: ClassifierSettings) -> float:
-    return min(1.0, sum(m.weight for m in matches) / cfg.keyword_cap)

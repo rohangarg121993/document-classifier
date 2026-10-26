@@ -55,15 +55,19 @@ result = classify(page, load_categories("config/categories.csv"), settings)
 
 ## How scoring works
 
-For each category and each page region (top, middle and bottom thirds, plus the full page):
+Each category collects independent evidence, and every signal removes part of the remaining doubt (ADR-0003):
 
 ```text
-region score   = 0.35 × synonym evidence + 0.25 × phrase evidence + 0.40 × TF-IDF similarity
-category score = region-weighted average (0.40 / 0.20 / 0.15 / 0.25) − 0.15 × negative-phrase hits
-confidence     = 0.7 × top score + 0.3 × (top − second)      → below 0.30: UNCLASSIFIED
+strength   = 1 − (1 − 0.95·synonyms)(1 − 0.60·phrases)(1 − 0.50·similarity) − 0.15 × negative hits
+confidence = strength × (1 − doubt of winner / doubt of runner-up)      doubt = 1 − strength
+             below 0.50 → UNCLASSIFIED, or parent_only when the parent category is clear
 ```
 
-Keyword evidence counts distinct hits, capped at 3. Keywords of 6 or more characters also match German compounds and OCR misspellings (the misspellings count 0.7×). Keywords shared by many categories count less. Every number is a setting.
+- **Synonyms** are document-type names. One synonym is full evidence when it's the title (top third). In the middle or bottom of the page it counts only 0.30 or 0.20.
+- **Phrases** count distinct hits, and three are full evidence. Hits further down the page count a little less (0.8 in the middle, 0.7 at the bottom). Long keywords also match German compounds and OCR misspellings (the misspellings count 0.7×). Phrases shared by many categories count less.
+- **Similarity** is TF-IDF on character n-grams against the category profile; a cosine of 0.5 counts as full evidence.
+
+Every number is a setting in `default_settings.toml`.
 
 ## Tests
 

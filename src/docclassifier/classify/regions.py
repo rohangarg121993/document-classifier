@@ -1,10 +1,8 @@
-"""Split a page into top / middle / bottom thirds plus the full page."""
+"""Split a page into top / middle / bottom thirds plus the full page, to tell where on the page a hit appears."""
 
 from __future__ import annotations
 
 from docclassifier.ocr.models import PageText
-
-REGIONS = ("top", "middle", "bottom", "full")
 
 
 def split_regions(page: PageText) -> dict[str, str]:

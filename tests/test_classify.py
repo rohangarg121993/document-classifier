@@ -49,10 +49,10 @@ def test_no_evidence_is_unclassified(categories_csv):
 
 
 def test_top_three_candidates_ordered_by_score(categories_csv):
-    page = page_of("Zwischenzeugnis Abmahnung abgemahnt")
+    page = page_of("Zwischenzeugnis Abmahnung Fehlverhalten")
     result = classify(page, load_categories(categories_csv), load_settings())
 
-    assert result.category_id == "DIS01"  # two distinct synonym hits beat one
+    assert result.candidates[0].category_id == "DIS01"  # synonym plus a phrase beats a synonym alone
     assert [c.category_id for c in result.candidates][:2] == ["DIS01", "ZEU03"]
     assert len(result.candidates) == 3
 

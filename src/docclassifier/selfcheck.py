@@ -35,46 +35,60 @@ def synthetic_page(category: Category) -> PageText:
     return PageText("\n".join(lines), words, PAGE_WIDTH, PAGE_HEIGHT, "native", 1)
 
 
-def selfcheck(categories: CategorySet, settings: Settings, min_margin: float) -> dict:
-    # Rank all categories: the decision threshold is irrelevant here, and no fallback should mask a miss.
+def selfcheck(categories: CategorySet, settings: Settings, min_confidence: float) -> dict:
+    # No fallback category, so a miss is never masked.
     settings = replace(settings, decision=replace(settings.decision, fallback_category_id=""))
     rows = []
     for category in categories:
-        ranked = classify(synthetic_page(category), categories, settings).candidates_all
-        ids = [c.category_id for c in ranked]
-        rank = ids.index(category.category_id) + 1
-        own = ranked[rank - 1].score
+        result = classify(synthetic_page(category), categories, settings)
+        ranked = result.candidates_all
+        rank = [c.category_id for c in ranked].index(category.category_id) + 1
         best_other = next(c for c in ranked if c.category_id != category.category_id)
-        margin = round(own - best_other.score, 4)
+        # The confidence the classifier reports for this page, credited only if the category actually won.
+        confidence = _raw_confidence(ranked) if rank == 1 else 0.0
         rows.append(
             {
                 "category_id": category.category_id,
                 "rank": rank,
-                "score": own,
+                "score": ranked[rank - 1].score,
+                "confidence": confidence,
                 "runner_up": best_other.category_id,
-                "margin": margin,
-                "passed": rank == 1 and margin >= min_margin,
+                "runner_up_score": best_other.score,
+                "passed": rank == 1 and confidence >= min_confidence,
             }
         )
     collisions = sorted({tuple(sorted((r["category_id"], r["runner_up"]))) for r in rows if not r["passed"]})
     failed = sum(not r["passed"] for r in rows)
     return {
         "summary": {"categories": len(rows), "passed": len(rows) - failed, "failed": failed},
-        "min_margin": min_margin,
+        "min_confidence": min_confidence,
         "collisions": [list(pair) for pair in collisions],
+        "shared_synonyms": categories.warnings,
         "categories": rows,
     }
 
 
+def _raw_confidence(ranked) -> float:
+    top, second = ranked[0].score, ranked[1].score if len(ranked) > 1 else 0.0
+    return round(top * (1 - (1 - top) / (1 - second)), 4) if second < 1 else 0.0
+
+
 def format_report(report: dict) -> str:
     s = report["summary"]
-    lines = [f"selfcheck: {s['passed']}/{s['categories']} categories pass (min margin {report['min_margin']})"]
+    lines = [f"selfcheck: {s['passed']}/{s['categories']} categories pass (min confidence {report['min_confidence']})"]
     failing = [r for r in report["categories"] if not r["passed"]]
     if failing:
         lines.append("")
-        lines.append(f"{'category':<10} {'rank':>4} {'score':>6} {'margin':>7}  runner-up")
-        for r in sorted(failing, key=lambda r: r["margin"]):
-            lines.append(f"{r['category_id']:<10} {r['rank']:>4} {r['score']:>6.3f} {r['margin']:>7.3f}  {r['runner_up']}")
+        lines.append(f"{'category':<10} {'rank':>4} {'score':>6} {'conf':>6}  runner-up")
+        for r in sorted(failing, key=lambda r: r["confidence"]):
+            lines.append(
+                f"{r['category_id']:<10} {r['rank']:>4} {r['score']:>6.3f} {r['confidence']:>6.3f}"
+                f"  {r['runner_up']} ({r['runner_up_score']:.3f})"
+            )
         lines.append("")
         lines.append("collisions: " + ", ".join(" / ".join(pair) for pair in report["collisions"]))
+    if report["shared_synonyms"]:
+        lines.append("")
+        lines.append(f"{len(report['shared_synonyms'])} synonym(s) are shared between categories:")
+        lines.extend(f"  {warning}" for warning in report["shared_synonyms"])
     return "\n".join(lines)

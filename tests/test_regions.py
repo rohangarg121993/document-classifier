@@ -1,4 +1,8 @@
-"""Page regions, exercised through `classify` with PageText fixtures that carry word positions."""
+"""Where on the page a hit appears, exercised through `classify` with PageText fixtures carrying word positions.
+
+Synonyms are document-type names, so they count fully only as a title (top third); phrases count a little
+less further down. With similarity off, one synonym hit gives strength 0.95 × position factor.
+"""
 
 from dataclasses import replace
 
@@ -14,7 +18,7 @@ FILLER = "lorem ipsum dolor sit amet consectetur"
 TOP, MIDDLE, BOTTOM = 60.0, 420.0, 780.0
 
 ROWS = [
-    "DIS01,Abmahnungen,x,Abmahnung,,,Disziplinar",
+    "DIS01,Abmahnungen,x,Abmahnung,Personalakte,,Disziplinar",
     "FIN01,Kontoauszug,x,Kontoauszug,,,Finanzen",
     "FIN09,Kontoauszug unten,x,Kontoauszug,,,Finanzen",
 ]
@@ -43,7 +47,7 @@ def page(lines):
 
 def run(p, cats, **classifier_overrides):
     settings = load_settings()
-    classifier = replace(settings.classifier, similarity_weight=0, **classifier_overrides)
+    classifier = replace(settings.classifier, similarity_reliability=0, **classifier_overrides)
     return classify(p, cats, replace(settings, classifier=classifier))
 
 
@@ -51,33 +55,30 @@ def score(result, category_id):
     return next(c for c in result.candidates_all if c.category_id == category_id).score
 
 
-def test_keyword_at_top_counts_more_than_at_bottom(cats):
-    at_top = page([(TOP, "Abmahnung " + FILLER), (MIDDLE, FILLER), (BOTTOM, FILLER)])
-    at_bottom = page([(TOP, FILLER), (MIDDLE, FILLER), (BOTTOM, "Abmahnung " + FILLER)])
-
-    assert score(run(at_top, cats), "DIS01") > score(run(at_bottom, cats), "DIS01")
-
-
-def test_empty_regions_share_their_weight(cats):
-    # Text only at the top: top (0.40) and full (0.25) are active and renormalised to 1.
-    # Both see one of DIS01's synonyms: 0.35 · 1/3 ≈ 0.1167, which is the whole score; no loss from empty regions.
-    only_top = page([(TOP, "Abmahnung " + FILLER)])
-
-    result = run(only_top, cats)
-
-    best = next(c for c in result.candidates_all if c.category_id == "DIS01")
-    assert best.score == pytest.approx(0.1167, abs=1e-3)
-    assert set(best.regions) == {"top", "full"}
-    assert best.regions["top"].weight == pytest.approx(0.40 / 0.65, abs=1e-3)
+def at(y, text):
+    lines = {TOP: FILLER, MIDDLE: FILLER, BOTTOM: FILLER}
+    lines[y] = f"{text} {FILLER}"
+    return page(sorted(lines.items()))
 
 
-def test_per_category_region_weight_override(cats):
-    # FIN09 overrides weight_bottom = 0.9; FIN01 uses the global 0.15. Same keyword, at the bottom.
-    p = page([(TOP, FILLER), (MIDDLE, FILLER), (BOTTOM, "Kontoauszug " + FILLER)])
+def test_synonym_counts_fully_only_as_a_title(cats):
+    assert score(run(at(TOP, "Abmahnung"), cats), "DIS01") == pytest.approx(0.95, abs=1e-3)
+    assert score(run(at(MIDDLE, "Abmahnung"), cats), "DIS01") == pytest.approx(0.95 * 0.30, abs=1e-3)
+    assert score(run(at(BOTTOM, "Abmahnung"), cats), "DIS01") == pytest.approx(0.95 * 0.20, abs=1e-3)
 
-    result = run(p, cats)
 
-    assert score(result, "FIN09") > score(result, "FIN01")
+def test_phrase_position_matters_less(cats):
+    # One phrase: 0.6 · (factor / 3)
+    assert score(run(at(TOP, "Personalakte"), cats), "DIS01") == pytest.approx(0.2, abs=1e-3)
+    assert score(run(at(BOTTOM, "Personalakte"), cats), "DIS01") == pytest.approx(0.2 * 0.7, abs=1e-3)
+
+
+def test_per_category_position_override(cats):
+    # FIN09 sets weight_bottom = 0.9; FIN01 uses the default bottom factor for synonyms (0.20).
+    result = run(at(BOTTOM, "Kontoauszug"), cats)
+
+    assert score(result, "FIN09") == pytest.approx(0.95 * 0.9, abs=1e-3)
+    assert score(result, "FIN01") == pytest.approx(0.95 * 0.20, abs=1e-3)
 
 
 def test_line_split_fallback_without_word_positions(cats):
@@ -88,13 +89,16 @@ def test_line_split_fallback_without_word_positions(cats):
     assert score(run(at_top, cats), "DIS01") > score(run(at_bottom, cats), "DIS01")
 
 
-def test_breakdown_per_region_in_json(cats):
-    p = page([(TOP, "Abmahnung " + FILLER), (MIDDLE, FILLER), (BOTTOM, FILLER)])
+def test_short_title_alone_in_top_third_counts(cats):
+    # A one-word title is enough: there is no minimum amount of text per region any more.
+    p = page([(TOP, "Abmahnung"), (MIDDLE, FILLER), (BOTTOM, FILLER)])
 
-    data = run(p, cats).to_dict()
+    assert score(run(p, cats), "DIS01") == pytest.approx(0.95, abs=1e-3)
 
-    regions = next(c for c in data["candidates"] if c["category_id"] == "DIS01")["regions"]
-    assert set(regions) == {"top", "middle", "bottom", "full"}
-    assert [m["keyword"] for m in regions["top"]["matched_synonyms"]] == ["Abmahnung"]
-    assert regions["bottom"]["matched_synonyms"] == []
-    assert "similarity" in regions["top"]
+
+def test_match_positions_in_json(cats):
+    data = run(page([(TOP, "Abmahnung"), (MIDDLE, "Personalakte " + FILLER)]), cats).to_dict()
+
+    best = next(c for c in data["candidates"] if c["category_id"] == "DIS01")
+    assert [(m["keyword"], m["position"]) for m in best["matched_synonyms"]] == [("Abmahnung", "top")]
+    assert [(m["keyword"], m["position"]) for m in best["matched_phrases"]] == [("Personalakte", "middle")]

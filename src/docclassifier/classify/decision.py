@@ -75,10 +75,16 @@ def _best_parent(ranked: list[Candidate], cfg: DecisionSettings) -> tuple[str | 
 
 
 def _confidence(scores: list[float], cfg: DecisionSettings) -> float:
-    """Strength of the winner blended with its lead over the runner-up."""
+    """Winner strength × how much less doubt the winner leaves than the runner-up (doubt = 1 − strength).
+
+    Two strong candidates that are nearly tied leave similar doubt, so confidence drops towards 0; a strong
+    winner against a weak runner-up keeps almost all of its strength.
+    """
     top = scores[0] if scores else 0.0
     second = scores[1] if len(scores) > 1 else 0.0
-    return round(cfg.confidence_score_weight * top + cfg.confidence_margin_weight * (top - second), 4)
+    if second >= 1.0:
+        return 0.0
+    return round(top * (1 - (1 - top) / (1 - second)), 4)
 
 
 def _unclassified(reason, confidence, candidates, ranked) -> ClassificationResult:
