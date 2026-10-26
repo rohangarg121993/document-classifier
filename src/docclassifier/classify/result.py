@@ -25,6 +25,7 @@ class Candidate:
     score: float
     synonym_score: float = 0.0
     phrase_score: float = 0.0
+    similarity: float = 0.0
     negative_penalty: float = 0.0
     matched_synonyms: list[KeywordMatch] = field(default_factory=list)
     matched_phrases: list[KeywordMatch] = field(default_factory=list)

@@ -1,4 +1,4 @@
-"""Scoring. Keyword evidence on the full page; similarity and page regions come in later tickets."""
+"""Scoring. Keyword evidence plus profile similarity on the full page; page regions come in a later ticket."""
 
 from __future__ import annotations
 
@@ -21,7 +21,11 @@ def classify(page: PageText, categories: CategorySet, settings: Settings) -> Cla
         MatchRules(cfg.min_prefix_length, cfg.min_fuzzy_length, cfg.fuzzy_threshold),
     )
 
-    ranked = [_score(category, categories, matcher, cfg) for category in categories]
+    similarities = categories.similarity(page.text)
+    ranked = [
+        _score(category, categories, matcher, similarity, cfg)
+        for category, similarity in zip(categories, similarities)
+    ]
     # Highest score first; sort is stable, so ties keep CSV order.
     ranked.sort(key=lambda c: -c.score)
 
@@ -42,7 +46,9 @@ def classify(page: PageText, categories: CategorySet, settings: Settings) -> Cla
     return result
 
 
-def _score(category: Category, categories: CategorySet, matcher: PageMatcher, cfg: ClassifierSettings) -> Candidate:
+def _score(
+    category: Category, categories: CategorySet, matcher: PageMatcher, similarity: float, cfg: ClassifierSettings
+) -> Candidate:
     synonyms = _matches(category.synonyms, categories, matcher, cfg)
     phrases = _matches(category.positive_phrases, categories, matcher, cfg)
     negatives = _matches(category.negative_phrases, None, matcher, cfg)
@@ -50,7 +56,12 @@ def _score(category: Category, categories: CategorySet, matcher: PageMatcher, cf
     synonym_score = _evidence(synonyms, cfg)
     phrase_score = _evidence(phrases, cfg)
     penalty = cfg.negative_penalty * len(negatives)
-    score = cfg.synonym_weight * synonym_score + cfg.phrase_weight * phrase_score - penalty
+    score = (
+        cfg.synonym_weight * synonym_score
+        + cfg.phrase_weight * phrase_score
+        + cfg.similarity_weight * similarity
+        - penalty
+    )
     return Candidate(
         category_id=category.category_id,
         category_name=category.name,
@@ -58,6 +69,7 @@ def _score(category: Category, categories: CategorySet, matcher: PageMatcher, cf
         score=round(min(1.0, max(0.0, score)), 4),
         synonym_score=round(synonym_score, 4),
         phrase_score=round(phrase_score, 4),
+        similarity=round(similarity, 4),
         negative_penalty=round(penalty, 4),
         matched_synonyms=synonyms,
         matched_phrases=phrases,

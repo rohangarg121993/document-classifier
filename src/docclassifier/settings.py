@@ -19,6 +19,7 @@ class ClassifierSettings:
     top_n: int
     synonym_weight: float
     phrase_weight: float
+    similarity_weight: float
     keyword_cap: float
     negative_penalty: float
     min_prefix_length: int
