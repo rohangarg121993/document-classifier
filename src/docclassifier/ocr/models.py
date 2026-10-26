@@ -16,6 +16,7 @@ class Word:
     x1: float
     y1: float
     confidence: float | None = None  # 0-100 from OCR engines; None for native PDF text
+    line: tuple[int, ...] | None = None  # OCR line identifier, used to rebuild line breaks
 
 
 @dataclass(frozen=True)

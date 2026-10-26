@@ -11,7 +11,12 @@ from typing import Any
 
 @dataclass(frozen=True)
 class OcrSettings:
+    engine: str
     languages: str
+    tesseract_cmd: str
+    dpi: int
+    force_ocr: bool
+    min_native_chars: int
 
 
 @dataclass(frozen=True)

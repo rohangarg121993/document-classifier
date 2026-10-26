@@ -1,7 +1,11 @@
+import io
+import os
+import shutil
 from pathlib import Path
 
 import pymupdf
 import pytest
+from PIL import Image
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REAL_CATEGORIES = REPO_ROOT / "config" / "categories.csv"
@@ -36,6 +40,67 @@ def make_pdf(tmp_path):
                 page.insert_text((72, y), text, fontsize=12)
         doc.save(path)
         doc.close()
+        return path
+
+    return _make
+
+
+def _tesseract_available() -> bool:
+    candidates = [os.environ.get("TESSERACT_CMD"), shutil.which("tesseract"), r"C:\Program Files\Tesseract-OCR	esseract.exe"]
+    return any(c and Path(c).exists() for c in candidates)
+
+
+def pytest_collection_modifyitems(config, items):
+    if _tesseract_available():
+        return
+    skip = pytest.mark.skip(reason="Tesseract binary not installed")
+    for item in items:
+        if "tesseract" in item.keywords:
+            item.add_marker(skip)
+
+
+def render_image(lines, dpi=200, rotate=0) -> Image.Image:
+    """Render (y, text) lines on an A4 page to a grayscale image, as a scanner would produce it."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=595, height=842)
+    for y, text in lines:
+        page.insert_text((72, y), text, fontsize=14)
+    pix = page.get_pixmap(dpi=dpi, colorspace=pymupdf.csGRAY)
+    doc.close()
+    image = Image.open(io.BytesIO(pix.tobytes("png")))
+    return image.rotate(rotate, expand=True, fillcolor=255) if rotate else image
+
+
+@pytest.fixture
+def make_scan(tmp_path):
+    """Write an image-only PDF: each page is a list of (y, text) lines rendered to pixels."""
+
+    def _make(pages, name="scan.pdf", rotate=0):
+        path = tmp_path / name
+        doc = pymupdf.open()
+        for lines in pages:
+            buf = io.BytesIO()
+            render_image(lines, rotate=rotate).save(buf, format="PNG")
+            page = doc.new_page(width=595, height=842)
+            page.insert_image(page.rect, stream=buf.getvalue())
+        doc.save(path)
+        doc.close()
+        return path
+
+    return _make
+
+
+@pytest.fixture
+def make_image(tmp_path):
+    """Write a PNG/JPG (one page) or multi-page TIFF from lists of (y, text) lines."""
+
+    def _make(pages, name="scan.png"):
+        path = tmp_path / name
+        images = [render_image(lines) for lines in pages]
+        if len(images) > 1:
+            images[0].save(path, save_all=True, append_images=images[1:])
+        else:
+            images[0].save(path)
         return path
 
     return _make
