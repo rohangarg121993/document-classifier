@@ -5,7 +5,9 @@ description = "Rule-based document page classifier: offline OCR plus keyword and
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "pillow>=10",
     "pymupdf>=1.24",
+    "pytesseract>=0.3.10",
     "rapidfuzz>=3",
     "scikit-learn>=1.4",
 ]

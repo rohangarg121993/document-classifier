@@ -2,8 +2,18 @@
 # Override any subset of keys in your own TOML file and pass it with --settings.
 
 [ocr]
+# OCR engine; "tesseract" is the only one in v1.
+engine = "tesseract"
 # Tesseract language packs, joined with "+".
 languages = "deu+eng"
+# Path to tesseract(.exe). Empty: TESSERACT_CMD, then PATH, then the default Windows install location.
+tesseract_cmd = ""
+# Resolution for rendering PDF pages before OCR.
+dpi = 300
+# OCR even when a PDF page has embedded text (for PDFs with broken text layers).
+force_ocr = false
+# Embedded PDF text with fewer non-space characters counts as missing, so the page is OCR'd.
+min_native_chars = 20
 
 [classifier]
 # How many candidate categories to report.
