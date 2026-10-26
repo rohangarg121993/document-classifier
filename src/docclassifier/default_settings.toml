@@ -9,9 +9,11 @@ languages = "deu+eng"
 # How many candidate categories to report.
 top_n = 3
 
-# Signal weights inside a region score. Similarity (0.40) is added by a later ticket.
+# Signal weights inside a region score.
 synonym_weight = 0.35
 phrase_weight = 0.25
+# Cosine similarity of the page to the category profile (TF-IDF on character n-grams).
+similarity_weight = 0.40
 
 # Distinct keyword hits (after specificity and fuzzy weighting) that count as full evidence.
 keyword_cap = 3

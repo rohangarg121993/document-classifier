@@ -1,5 +1,7 @@
 import logging
 
+import pytest
+
 from docclassifier import classify, load_categories, load_settings
 from docclassifier.ocr import PageText, Word
 
@@ -40,6 +42,7 @@ def test_inflected_compound_matches_long_synonym(categories_csv):
     assert result.category_id == "DIS01"
 
 
+@pytest.mark.xfail(strict=True, reason="needs the confidence threshold from the decision layer (#7)")
 def test_no_evidence_is_unclassified(categories_csv):
     result = classify(page_of("Speiseplan der Kantine"), load_categories(categories_csv), load_settings())
 

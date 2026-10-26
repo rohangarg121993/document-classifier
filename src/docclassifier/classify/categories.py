@@ -13,7 +13,10 @@ import math
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
+
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 from docclassifier.classify.normalize import normalize
 
@@ -64,6 +67,24 @@ class CategorySet(Sequence[Category]):
         """1 / (1 + ln n), where n is how many categories list the keyword as synonym or positive phrase."""
         n = self._listing_counts.get(normalize(keyword), 1)
         return 1 / (1 + math.log(n))
+
+    def similarity(self, text: str) -> list[float]:
+        """Cosine similarity of `text` to each category profile, in CSV order.
+
+        TF-IDF on character n-grams (3-5, within word boundaries), fitted on the category profiles only:
+        name, description, synonyms and positive phrases. No document data, no training.
+        """
+        vectorizer, profiles = self._tfidf
+        # Rows are L2-normalised by TfidfVectorizer, so the dot product is the cosine.
+        return (profiles @ vectorizer.transform([normalize(text)]).T).toarray().ravel().tolist()
+
+    @cached_property
+    def _tfidf(self):
+        documents = [
+            normalize(" ".join([c.name, c.description, *c.synonyms, *c.positive_phrases])) for c in self._categories
+        ]
+        vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), sublinear_tf=True)
+        return vectorizer, vectorizer.fit_transform(documents)
 
     def __getitem__(self, index):
         return self._categories[index]

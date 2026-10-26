@@ -1,5 +1,7 @@
 """Keyword rules from the spec, exercised through `classify` only."""
 
+from dataclasses import replace
+
 import pytest
 
 from docclassifier import classify, load_categories, load_settings
@@ -24,13 +26,11 @@ def cats(tmp_path):
     return load_categories(path)
 
 
-def run(text, cats, settings_toml=None, tmp_path=None):
+def run(text, cats, **classifier_overrides):
+    """Classify with similarity switched off, so scores reflect keyword evidence only."""
     settings = load_settings()
-    if settings_toml:
-        path = tmp_path / "s.toml"
-        path.write_text(settings_toml, encoding="utf-8")
-        settings = load_settings(path)
-    return classify(page_of(text), cats, settings)
+    classifier = replace(settings.classifier, similarity_weight=0, **classifier_overrides)
+    return classify(page_of(text), cats, replace(settings, classifier=classifier))
 
 
 def candidate(result, category_id):
@@ -60,7 +60,7 @@ def test_short_keywords_are_whole_word_only(cats):
     assert candidate(result, "AZF01").score == 0
 
 
-def test_fuzzy_match_on_long_keyword_counts_less(cats, tmp_path):
+def test_fuzzy_match_on_long_keyword_counts_less(cats):
     exact = run("Pflichtverletzung", cats)
     fuzzy = run("Pflichtverletzunq", cats)  # OCR error: g -> q
 
@@ -91,14 +91,14 @@ def test_distinct_hits_only(cats):
     assert candidate(once, "DIS01").score == candidate(many, "DIS01").score
 
 
-def test_cap_limits_score(cats, tmp_path):
+def test_cap_limits_score(cats):
     two = run("Pflichtverletzung Personalakte", cats)
     three = run("Pflichtverletzung Personalakte arbeitsrechtliche Konsequenzen", cats)
 
     assert candidate(three, "DIS01").score > candidate(two, "DIS01").score
     # With cap 2, the third phrase adds nothing.
-    capped2 = run("Pflichtverletzung Personalakte", cats, "[classifier]\nkeyword_cap = 2\n", tmp_path)
-    capped3 = run("Pflichtverletzung Personalakte arbeitsrechtliche Konsequenzen", cats, "[classifier]\nkeyword_cap = 2\n", tmp_path)
+    capped2 = run("Pflichtverletzung Personalakte", cats, keyword_cap=2)
+    capped3 = run("Pflichtverletzung Personalakte arbeitsrechtliche Konsequenzen", cats, keyword_cap=2)
     assert candidate(capped2, "DIS01").score == candidate(capped3, "DIS01").score
 
 
