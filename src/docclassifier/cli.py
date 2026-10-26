@@ -2,6 +2,7 @@
 
     docclassify classify FILE --page N --categories CSV     one page → pretty JSON
     docclassify classify FILE_OR_FOLDER --categories CSV    every page → JSON Lines
+    docclassify selfcheck --categories CSV                  can each category recognise its own synthetic page?
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from pathlib import Path
 
 from docclassifier.batch import classify_all, page_record
 from docclassifier.classify import CategoryFileError, load_categories
+from docclassifier.selfcheck import format_report, selfcheck
 from docclassifier.settings import load_settings
 
 
@@ -29,9 +31,17 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--no-cache", action="store_true", help="don't read or write the OCR cache")
     cmd.add_argument("--force-ocr", action="store_true", help="OCR even when a PDF page has embedded text")
     cmd.add_argument("--workers", type=int, default=1, help="parallel worker processes for batches (default 1)")
+    check = sub.add_parser("selfcheck", help="check each category against a synthetic page built from its definition")
+    check.add_argument("--categories", required=True, help="category CSV file")
+    check.add_argument("--settings", help="TOML file overriding default settings")
+    check.add_argument("--min-margin", type=float, default=0.05, help="lead over the runner-up needed to pass")
+    check.add_argument("--max-failures", type=int, default=0, help="exit non-zero only above this many failures")
+    check.add_argument("--json", action="store_true", help="print the full report as JSON")
     args = parser.parse_args(argv)
 
     settings = load_settings(args.settings)
+    if args.command == "selfcheck":
+        return _selfcheck(args, settings)
     if args.no_cache:
         settings = replace(settings, cache=replace(settings.cache, enabled=False))
     if args.force_ocr:
@@ -61,3 +71,15 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(json.dumps(record, ensure_ascii=False) + "\n")
         sys.stdout.flush()
     return 1 if failures else 0
+
+
+def _selfcheck(args, settings) -> int:
+    try:
+        categories = load_categories(args.categories)
+    except CategoryFileError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    report = selfcheck(categories, settings, args.min_margin)
+    sys.stdout.reconfigure(encoding="utf-8")
+    print(json.dumps(report, ensure_ascii=False, indent=2) if args.json else format_report(report))
+    return 1 if report["summary"]["failed"] > args.max_failures else 0

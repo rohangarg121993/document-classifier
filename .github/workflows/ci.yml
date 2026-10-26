@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tesseract (German + English)
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Tests
+        run: uv run python -m pytest -q
+
+      - name: Taxonomy self-check
+        # Every category must recognise its own synthetic page (raise --max-failures to tolerate known collisions).
+        run: uv run python -m docclassifier selfcheck --categories config/categories.csv
