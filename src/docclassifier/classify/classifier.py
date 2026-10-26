@@ -1,13 +1,17 @@
-"""Scoring. Keyword evidence plus profile similarity on the full page; page regions come in a later ticket."""
+"""Scoring: keyword evidence plus profile similarity on the full page, then the decision layer.
+
+Page regions come in a later ticket.
+"""
 
 from __future__ import annotations
 
 import logging
 
 from docclassifier.classify.categories import Category, CategorySet
+from docclassifier.classify.decision import decide
 from docclassifier.classify.matching import MatchRules, PageMatcher
 from docclassifier.classify.normalize import normalize
-from docclassifier.classify.result import UNCLASSIFIED, Candidate, ClassificationResult, KeywordMatch
+from docclassifier.classify.result import Candidate, ClassificationResult, KeywordMatch
 from docclassifier.ocr.models import PageText
 from docclassifier.settings import ClassifierSettings, Settings
 
@@ -16,10 +20,8 @@ log = logging.getLogger(__name__)
 
 def classify(page: PageText, categories: CategorySet, settings: Settings) -> ClassificationResult:
     cfg = settings.classifier
-    matcher = PageMatcher(
-        normalize(page.text),
-        MatchRules(cfg.min_prefix_length, cfg.min_fuzzy_length, cfg.fuzzy_threshold),
-    )
+    text = normalize(page.text)
+    matcher = PageMatcher(text, MatchRules(cfg.min_prefix_length, cfg.min_fuzzy_length, cfg.fuzzy_threshold))
 
     similarities = categories.similarity(page.text)
     ranked = [
@@ -29,19 +31,12 @@ def classify(page: PageText, categories: CategorySet, settings: Settings) -> Cla
     # Highest score first; sort is stable, so ties keep CSV order.
     ranked.sort(key=lambda c: -c.score)
 
-    candidates = ranked[: cfg.top_n]
-    best = candidates[0] if candidates else None
-    if best is None or best.score == 0:
-        result = ClassificationResult("unclassified", UNCLASSIFIED, None, None, 0.0, candidates, ranked)
-    else:
-        result = ClassificationResult(
-            "classified", best.category_id, best.category_name, best.parent_category, best.score, candidates, ranked
-        )
+    result = decide(ranked, len(text.replace(" ", "")), cfg.top_n, categories, settings.decision)
     # IDs and scores only: page text is personal data and must never reach the logs (ADR-0001).
     log.info(
-        "page %s -> %s (confidence %.3f; top: %s)",
-        page.page_number, result.category_id, result.confidence,
-        ", ".join(f"{c.category_id}={c.score:.3f}" for c in candidates),
+        "page %s -> %s (%s, confidence %.3f; top: %s)",
+        page.page_number, result.category_id, result.reason or result.status, result.confidence,
+        ", ".join(f"{c.category_id}={c.score:.3f}" for c in result.candidates),
     )
     return result
 

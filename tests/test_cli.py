@@ -15,7 +15,13 @@ def run_cli(*args):
 def test_classify_digital_pdf_page_against_real_taxonomy(make_pdf):
     pdf = make_pdf([
         [(80, "Deckblatt")],
-        [(80, "Abmahnung"), (140, "Sehr geehrter Herr Beispiel,"), (160, "wir mahnen Sie hiermit ab.")],
+        [
+            (80, "Abmahnung"),
+            (140, "Sehr geehrter Herr Beispiel,"),
+            (160, "wegen Ihrer Pflichtverletzung am 3. Mai erteilen wir Ihnen eine Abmahnung."),
+            (180, "Im Wiederholungsfall drohen arbeitsrechtliche Konsequenzen."),
+            (200, "Eine Kopie geht zur Personalakte."),
+        ],
     ])
 
     proc = run_cli("classify", pdf, "--page", 2, "--categories", REAL_CATEGORIES)

@@ -1,7 +1,5 @@
 import logging
 
-import pytest
-
 from docclassifier import classify, load_categories, load_settings
 from docclassifier.ocr import PageText, Word
 
@@ -39,15 +37,15 @@ def test_inflected_compound_matches_long_synonym(categories_csv):
     # "abgemahnt" (9 characters) also matches at the start of "abgemahnten".
     result = classify(page_of("die abgemahnten Kollegen"), load_categories(categories_csv), load_settings())
 
-    assert result.category_id == "DIS01"
+    assert result.candidates[0].category_id == "DIS01"
+    assert [(m.keyword, m.kind) for m in result.candidates[0].matched_synonyms] == [("abgemahnt", "prefix")]
 
 
-@pytest.mark.xfail(strict=True, reason="needs the confidence threshold from the decision layer (#7)")
 def test_no_evidence_is_unclassified(categories_csv):
     result = classify(page_of("Speiseplan der Kantine"), load_categories(categories_csv), load_settings())
 
     assert result.status == "unclassified"
-    assert result.confidence == 0
+    assert result.confidence < load_settings().decision.threshold
 
 
 def test_top_three_candidates_ordered_by_score(categories_csv):

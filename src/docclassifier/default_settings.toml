@@ -27,3 +27,14 @@ min_fuzzy_length = 6
 fuzzy_threshold = 90
 # A fuzzy hit counts this much of an exact hit.
 fuzzy_weight = 0.7
+
+[decision]
+# confidence = score_weight × top score + margin_weight × (top score − second score)
+confidence_score_weight = 0.7
+confidence_margin_weight = 0.3
+# Below this confidence the page is UNCLASSIFIED (reason "low_confidence").
+threshold = 0.30
+# Pages with fewer non-space characters are UNCLASSIFIED (reason "insufficient_text").
+min_text_chars = 20
+# Map every UNCLASSIFIED result to this category (e.g. "SON02"); empty keeps UNCLASSIFIED visible.
+fallback_category_id = ""

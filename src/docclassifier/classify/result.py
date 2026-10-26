@@ -34,12 +34,14 @@ class Candidate:
 
 @dataclass(frozen=True)
 class ClassificationResult:
-    status: Literal["classified", "unclassified"]
+    status: Literal["classified", "parent_only", "fallback", "unclassified"]
     category_id: str
     category_name: str | None
     parent_category: str | None
     confidence: float
     candidates: list[Candidate]
+    reason: Literal["low_confidence", "insufficient_text"] | None = None
+    parent_confidence: float | None = None
     # Every category, best first. For API users and tests; not part of the JSON output.
     candidates_all: list[Candidate] = field(default_factory=list, repr=False)
 
