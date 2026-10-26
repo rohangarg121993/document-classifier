@@ -2,6 +2,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 from conftest import REAL_CATEGORIES
 
 
@@ -63,3 +65,14 @@ def test_broken_category_file_exits_nonzero_with_all_problems(make_pdf, tmp_path
 
     assert proc.returncode != 0
     assert "Missing required column" in proc.stderr
+
+
+@pytest.mark.tesseract
+def test_no_cache_flag_leaves_no_cache_behind(make_scan, categories_csv, tmp_path):
+    scan = make_scan([[(80, "Abmahnung"), (140, "wegen Ihrer Pflichtverletzung am 3. Mai.")]])
+
+    proc = run_cli("classify", scan, "--page", 1, "--categories", categories_csv, "--no-cache")
+
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout)["extraction_method"] == "ocr"
+    assert not (tmp_path / ".cache").exists()

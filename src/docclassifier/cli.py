@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 import time
+from dataclasses import replace
 
 from docclassifier.classify import CategoryFileError, classify, load_categories
 from docclassifier.ocr import ExtractionError, extract_page
@@ -21,9 +22,15 @@ def main(argv: list[str] | None = None) -> int:
     cmd.add_argument("--categories", required=True, help="category CSV file")
     cmd.add_argument("--settings", help="TOML file overriding default settings")
     cmd.add_argument("--include-text", action="store_true", help="include the page text in the output")
+    cmd.add_argument("--no-cache", action="store_true", help="don't read or write the OCR cache")
+    cmd.add_argument("--force-ocr", action="store_true", help="OCR even when a PDF page has embedded text")
     args = parser.parse_args(argv)
 
     settings = load_settings(args.settings)
+    if args.no_cache:
+        settings = replace(settings, cache=replace(settings.cache, enabled=False))
+    if args.force_ocr:
+        settings = replace(settings, ocr=replace(settings.ocr, force_ocr=True))
     try:
         categories = load_categories(args.categories)
     except CategoryFileError as exc:

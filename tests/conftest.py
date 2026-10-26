@@ -104,3 +104,9 @@ def make_image(tmp_path):
         return path
 
     return _make
+
+
+@pytest.fixture(autouse=True)
+def _isolated_cwd(tmp_path, monkeypatch):
+    """Relative paths (the OCR cache in particular) resolve inside the test's own temp dir, never the repo."""
+    monkeypatch.chdir(tmp_path)

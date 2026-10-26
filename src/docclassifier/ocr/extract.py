@@ -8,6 +8,7 @@ from pathlib import Path
 import pymupdf
 from PIL import Image, ImageOps
 
+from docclassifier.ocr import cache
 from docclassifier.ocr.engines import OcrUnavailableError, create_engine
 from docclassifier.ocr.models import PageText, Word
 from docclassifier.settings import Settings
@@ -29,7 +30,7 @@ def extract_page(file: str | Path, page_number: int, settings: Settings) -> Page
         raise ExtractionError(f"Unsupported file type {path.suffix!r}: {path.name}")
     if suffix == ".pdf":
         return _from_pdf(path, page_number, settings)
-    return _ocr(_load_image(path, page_number), page_number, settings)
+    return _cached_ocr(path, page_number, settings, lambda: _load_image(path, page_number))
 
 
 def page_count(file: str | Path) -> int:
@@ -60,9 +61,24 @@ def _from_pdf(path: Path, page_number: int, settings: Settings) -> PageText:
             if len("".join(text.split())) >= settings.ocr.min_native_chars:
                 words = [Word(w[4], w[0], w[1], w[2], w[3]) for w in page.get_text("words", sort=True)]
                 return PageText(text, words, page.rect.width, page.rect.height, "native", page_number)
-        pix = page.get_pixmap(dpi=settings.ocr.dpi, colorspace=pymupdf.csGRAY)
-        image = Image.frombytes("L", (pix.width, pix.height), pix.samples)
-    return _ocr(image, page_number, settings)
+        dpi = settings.ocr.dpi
+        return _cached_ocr(path, page_number, settings, lambda: _render(page, dpi))
+
+
+def _render(page: pymupdf.Page, dpi: int) -> Image.Image:
+    pix = page.get_pixmap(dpi=dpi, colorspace=pymupdf.csGRAY)
+    return Image.frombytes("L", (pix.width, pix.height), pix.samples)
+
+
+def _cached_ocr(path: Path, page_number: int, settings: Settings, load_image) -> PageText:
+    if not settings.cache.enabled:
+        return _ocr(load_image(), page_number, settings)
+    key = cache.cache_key(path, page_number, settings)
+    page = cache.load(key, settings)
+    if page is None:
+        page = _ocr(load_image(), page_number, settings)
+        cache.store(key, page, settings)
+    return page
 
 
 def _load_image(path: Path, page_number: int) -> Image.Image:
