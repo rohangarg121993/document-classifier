@@ -26,6 +26,11 @@ class ClassifierSettings:
     min_fuzzy_length: int
     fuzzy_threshold: float
     fuzzy_weight: float
+    region_weight_top: float
+    region_weight_middle: float
+    region_weight_bottom: float
+    region_weight_full: float
+    min_region_chars: int
 
 
 @dataclass(frozen=True)

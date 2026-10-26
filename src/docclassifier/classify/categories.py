@@ -68,15 +68,15 @@ class CategorySet(Sequence[Category]):
         n = self._listing_counts.get(normalize(keyword), 1)
         return 1 / (1 + math.log(n))
 
-    def similarity(self, text: str) -> list[float]:
-        """Cosine similarity of `text` to each category profile, in CSV order.
+    def similarities(self, texts: list[str]) -> list[list[float]]:
+        """For each text, the cosine similarity to each category profile, in CSV order.
 
         TF-IDF on character n-grams (3-5, within word boundaries), fitted on the category profiles only:
         name, description, synonyms and positive phrases. No document data, no training.
         """
         vectorizer, profiles = self._tfidf
         # Rows are L2-normalised by TfidfVectorizer, so the dot product is the cosine.
-        return (profiles @ vectorizer.transform([normalize(text)]).T).toarray().ravel().tolist()
+        return (vectorizer.transform([normalize(t) for t in texts]) @ profiles.T).toarray().tolist()
 
     @cached_property
     def _tfidf(self):
