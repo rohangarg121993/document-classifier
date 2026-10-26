@@ -46,3 +46,14 @@ def test_bad_page_number_exits_nonzero_with_message(make_pdf, categories_csv):
 
     assert proc.returncode != 0
     assert "page 9" in proc.stderr
+
+
+def test_broken_category_file_exits_nonzero_with_all_problems(make_pdf, tmp_path):
+    pdf = make_pdf([[(80, "Abmahnung")]])
+    bad = tmp_path / "bad.csv"
+    bad.write_text("category_id,category_name\nX,Y\n", encoding="utf-8")
+
+    proc = run_cli("classify", pdf, "--page", 1, "--categories", bad)
+
+    assert proc.returncode != 0
+    assert "Missing required column" in proc.stderr

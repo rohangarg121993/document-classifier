@@ -7,7 +7,7 @@ import json
 import sys
 import time
 
-from docclassifier.classify import classify, load_categories
+from docclassifier.classify import CategoryFileError, classify, load_categories
 from docclassifier.ocr import ExtractionError, extract_page
 from docclassifier.settings import load_settings
 
@@ -24,7 +24,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     settings = load_settings(args.settings)
-    categories = load_categories(args.categories)
+    try:
+        categories = load_categories(args.categories)
+    except CategoryFileError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     started = time.perf_counter()
     try:
