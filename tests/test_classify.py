@@ -23,7 +23,7 @@ def test_synonym_on_page_picks_its_category(categories_csv):
     assert result.category_name == "Abmahnungen"
     assert result.parent_category == "Abmahnung & Disziplinar"
     assert 0 < result.confidence <= 1
-    assert result.candidates[0].matched_synonyms == ["abmahnung"]
+    assert [m.keyword for m in result.candidates[0].matched_synonyms] == ["Abmahnung"]
 
 
 def test_umlauts_and_sharp_s_are_normalised(categories_csv):
@@ -33,12 +33,11 @@ def test_umlauts_and_sharp_s_are_normalised(categories_csv):
     assert result.category_id == "GES01"
 
 
-def test_whole_word_only(categories_csv):
-    # "abgemahnt" is a synonym; "abgemahnten" is a different word for the skeleton's exact matching.
+def test_inflected_compound_matches_long_synonym(categories_csv):
+    # "abgemahnt" (9 characters) also matches at the start of "abgemahnten".
     result = classify(page_of("die abgemahnten Kollegen"), load_categories(categories_csv), load_settings())
 
-    assert result.status == "unclassified"
-    assert result.category_id == "UNCLASSIFIED"
+    assert result.category_id == "DIS01"
 
 
 def test_no_evidence_is_unclassified(categories_csv):

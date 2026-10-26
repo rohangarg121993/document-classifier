@@ -6,7 +6,22 @@
 languages = "deu+eng"
 
 [classifier]
-# Number of distinct keyword hits that counts as full evidence.
-keyword_cap = 3
 # How many candidate categories to report.
 top_n = 3
+
+# Signal weights inside a region score. Similarity (0.40) is added by a later ticket.
+synonym_weight = 0.35
+phrase_weight = 0.25
+
+# Distinct keyword hits (after specificity and fuzzy weighting) that count as full evidence.
+keyword_cap = 3
+# Subtracted from a category's score per distinct negative-phrase hit.
+negative_penalty = 0.15
+
+# Keywords at least this long (normalised) also match the start of longer words (German compounds).
+min_prefix_length = 6
+# Keywords at least this long also match with OCR errors, at this rapidfuzz ratio or higher.
+min_fuzzy_length = 6
+fuzzy_threshold = 90
+# A fuzzy hit counts this much of an exact hit.
+fuzzy_weight = 0.7

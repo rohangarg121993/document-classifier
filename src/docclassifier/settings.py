@@ -16,8 +16,15 @@ class OcrSettings:
 
 @dataclass(frozen=True)
 class ClassifierSettings:
-    keyword_cap: int
     top_n: int
+    synonym_weight: float
+    phrase_weight: float
+    keyword_cap: float
+    negative_penalty: float
+    min_prefix_length: int
+    min_fuzzy_length: int
+    fuzzy_threshold: float
+    fuzzy_weight: float
 
 
 @dataclass(frozen=True)
