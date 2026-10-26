@@ -1,0 +1,33 @@
+# --- Personal data: never commit (see docs/adr/0001-no-personal-data-in-public-repo.md) ---
+# Real documents
+documents/
+samples/
+*.pdf
+*.tif
+*.tiff
+*.png
+*.jpg
+*.jpeg
+!tests/fixtures/**/*.pdf
+!tests/fixtures/**/*.png
+# OCR cache (contains extracted page text)
+.cache/
+# Review / label files (contain file names and per-page predictions)
+labels/
+*.labels.csv
+review*.csv
+# Classifier outputs
+output/
+*.jsonl
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
