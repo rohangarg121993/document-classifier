@@ -33,9 +33,15 @@ class PageMatcher:
         self._tokens = normalized_text.split()
         self._rules = rules
         self._windows: dict[int, list[str]] = {}
+        self._cache: dict[str, MatchKind | None] = {}
 
     def match(self, keyword: str) -> MatchKind | None:
         """`keyword` must already be normalised."""
+        if keyword not in self._cache:
+            self._cache[keyword] = self._match(keyword)
+        return self._cache[keyword]
+
+    def _match(self, keyword: str) -> MatchKind | None:
         if not keyword:
             return None
         if f" {keyword} " in self._padded:

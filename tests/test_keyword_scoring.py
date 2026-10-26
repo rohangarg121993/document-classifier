@@ -130,6 +130,18 @@ def test_breakdown_in_cli_json_shape(cats):
     data = result.to_dict()
 
     best = data["candidates"][0]
-    assert best["matched_synonyms"] == [{"keyword": "Abmahnung", "kind": "exact", "weight": 1.0, "position": "top"}]
+    assert best["matched_synonyms"] == [
+        {"keyword": "Abmahnung", "kind": "exact", "weight": 1.0, "position": "top", "size": 1.0}
+    ]
     assert best["matched_phrases"][0]["kind"] == "fuzzy"
     assert "candidates_all" not in data  # full ranking is for the API, not the JSON output
+
+
+def test_decomposed_umlauts_match_exactly(cats):
+    # Some PDFs store "ü" as "u" + a combining diaeresis (Unicode NFD).
+    import unicodedata
+
+    result = run(unicodedata.normalize("NFD", "Ärztliche Datenschutzerklärung und Vertraulichkeit"), cats)
+
+    best = candidate(result, "VPF01")
+    assert [(m.keyword, m.kind) for m in best.matched_synonyms] == [("Datenschutzerklaerung", "exact")]

@@ -63,7 +63,7 @@ confidence = strength × (1 − doubt of winner / doubt of runner-up)      doubt
              below 0.50 → UNCLASSIFIED, or parent_only when the parent category is clear
 ```
 
-- **Synonyms** are document-type names. One synonym is full evidence when it's the title (top third). In the middle or bottom of the page it counts only 0.30 or 0.20.
+- **Synonyms** are document-type names. One synonym is full evidence when it's the title: top third, or large print anywhere. A mere mention further down counts 0.5 or 0.4, but only when another document type is the title. On pages without a title (permits, ID documents, forms), the best-placed name counts fully.
 - **Phrases** count distinct hits, and three are full evidence. Hits further down the page count a little less (0.8 in the middle, 0.7 at the bottom). Long keywords also match German compounds and OCR misspellings (the misspellings count 0.7×). Phrases shared by many categories count less.
 - **Similarity** is TF-IDF on character n-grams against the category profile; a cosine of 0.5 counts as full evidence.
 

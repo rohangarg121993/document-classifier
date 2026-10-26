@@ -1,7 +1,7 @@
 """Where on the page a hit appears, exercised through `classify` with PageText fixtures carrying word positions.
 
-Synonyms are document-type names, so they count fully only as a title (top third); phrases count a little
-less further down. With similarity off, one synonym hit gives strength 0.95 × position factor.
+Synonyms are document-type names, so they count fully as a title (top third or large print) and less in
+running text; phrases count a little less further down. With similarity off, one synonym hit gives strength 0.95 × position factor.
 """
 
 from dataclasses import replace
@@ -61,10 +61,8 @@ def at(y, text):
     return page(sorted(lines.items()))
 
 
-def test_synonym_counts_fully_only_as_a_title(cats):
+def test_synonym_as_title_counts_fully(cats):
     assert score(run(at(TOP, "Abmahnung"), cats), "DIS01") == pytest.approx(0.95, abs=1e-3)
-    assert score(run(at(MIDDLE, "Abmahnung"), cats), "DIS01") == pytest.approx(0.95 * 0.30, abs=1e-3)
-    assert score(run(at(BOTTOM, "Abmahnung"), cats), "DIS01") == pytest.approx(0.95 * 0.20, abs=1e-3)
 
 
 def test_phrase_position_matters_less(cats):
@@ -74,15 +72,15 @@ def test_phrase_position_matters_less(cats):
 
 
 def test_per_category_position_override(cats):
-    # FIN09 sets weight_bottom = 0.9; FIN01 uses the default bottom factor for synonyms (0.20).
-    result = run(at(BOTTOM, "Kontoauszug"), cats)
+    # "Abmahnung" is the title. FIN09 sets weight_bottom = 0.9; FIN01 uses the default bottom factor (0.4).
+    result = run(page([(TOP, "Abmahnung " + FILLER), (MIDDLE, FILLER), (BOTTOM, "Kontoauszug " + FILLER)]), cats)
 
     assert score(result, "FIN09") == pytest.approx(0.95 * 0.9, abs=1e-3)
-    assert score(result, "FIN01") == pytest.approx(0.95 * 0.20, abs=1e-3)
+    assert score(result, "FIN01") == pytest.approx(0.95 * 0.4, abs=1e-3)
 
 
 def test_line_split_fallback_without_word_positions(cats):
-    lines = ["Abmahnung " + FILLER] + [FILLER] * 8
+    lines = ["Personalakte " + FILLER] + [FILLER] * 8
     at_top = PageText("\n".join(lines), [], 595.0, HEIGHT, "native", 1)
     at_bottom = PageText("\n".join(reversed(lines)), [], 595.0, HEIGHT, "native", 1)
 
@@ -102,3 +100,40 @@ def test_match_positions_in_json(cats):
     best = next(c for c in data["candidates"] if c["category_id"] == "DIS01")
     assert [(m["keyword"], m["position"]) for m in best["matched_synonyms"]] == [("Abmahnung", "top")]
     assert [(m["keyword"], m["position"]) for m in best["matched_phrases"]] == [("Personalakte", "middle")]
+
+
+def big(y, text, height=28.0):
+    """A line printed in a large font: taller word boxes than the 12-point body text."""
+    words, x = [], 72.0
+    for token in text.split():
+        words.append(Word(token, x, y - height / 2, x + 14 * len(token), y + height / 2))
+        x += 14 * len(token) + 6
+    return words
+
+
+def test_synonym_in_large_print_counts_as_a_title_anywhere(cats):
+    body = page([(TOP, FILLER), (TOP + 20, FILLER), (MIDDLE, FILLER), (MIDDLE + 20, FILLER), (BOTTOM - 40, FILLER)])
+    label = big(BOTTOM, "Abmahnung")
+    p = PageText(body.text + "\nAbmahnung", body.words + label, body.width, body.height, "native", 1)
+
+    result = run(p, cats)
+
+    assert score(result, "DIS01") == pytest.approx(0.95, abs=1e-3)
+    match = next(c for c in result.candidates_all if c.category_id == "DIS01").matched_synonyms[0]
+    assert match.position == "heading"
+    assert match.size >= 2.0  # relative to the page's median word height
+
+
+def test_without_a_title_the_best_placed_synonym_counts_fully(cats):
+    # No document-type name at the top: the lower-placed synonym is the page's de facto title.
+    assert score(run(at(BOTTOM, "Kontoauszug"), cats), "FIN01") == pytest.approx(0.95, abs=1e-3)
+
+
+def test_synonym_in_running_text_counts_less_when_another_type_is_the_title(cats):
+    # "Kontoauszug" is the title; "Abmahnung" is merely mentioned further down.
+    p = page([(TOP, "Kontoauszug " + FILLER), (MIDDLE, FILLER), (BOTTOM, "Abmahnung " + FILLER)])
+
+    result = run(p, cats)
+
+    assert score(result, "FIN01") == pytest.approx(0.95, abs=1e-3)
+    assert score(result, "DIS01") == pytest.approx(0.95 * 0.4, abs=1e-3)

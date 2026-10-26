@@ -15,7 +15,8 @@ class KeywordMatch:
     keyword: str
     kind: Literal["exact", "prefix", "fuzzy"]
     weight: float  # position factor × specificity × (1 for exact/prefix, fuzzy_weight for fuzzy)
-    position: Literal["top", "middle", "bottom", "page"] = "page"  # "page" for negatives (position-free)
+    position: Literal["heading", "top", "middle", "bottom", "page"] = "page"  # "page": negatives, position-free
+    size: float | None = None  # print size relative to the page's median word; ≥ heading_ratio means large print
 
 
 @dataclass(frozen=True)

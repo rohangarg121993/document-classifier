@@ -3,6 +3,8 @@
 Layouts follow real letters: title in the top third, body in the middle, signature/footer at the bottom.
 """
 
+import unicodedata
+
 import pytest
 
 from docclassifier import classify, load_categories, load_settings
@@ -37,6 +39,15 @@ PAGES = {
         (700, "Musterstadt, den 30. September 2020  Der Präsident  Siegel"),
     ],
     "sibling title only": [(60, "Endzeugnis"), (400, "Hiermit bestätigen wir die Angaben."), (700, "Personalabteilung")],
+    # Permit-style page: no letter title, type label in normal print at the bottom, umlauts stored decomposed (NFD)
+    # as some PDFs do.
+    "residence permit": [
+        (60, "BUNDESREPUBLIK DEUTSCHLAND  FEDERAL REPUBLIC OF GERMANY"),
+        (330, unicodedata.normalize("NFD", "Name / Surname  Vorname / Given names")),
+        (360, unicodedata.normalize("NFD", "Staatsangehörigkeit / Nationality  Geburtsdatum / Date of birth")),
+        (390, unicodedata.normalize("NFD", "Gültig bis / Valid until  Art des Titels / Type of permit")),
+        (700, "Residence Permit"),
+    ],
     "canteen menu": [
         (60, "Speiseplan Kantine"),
         (380, "Montag Gemüsesuppe, Dienstag Nudeln mit Tomatensoße, Mittwoch Fisch"),
@@ -61,6 +72,7 @@ def run(name, cats):
         ("interim reference", "ZEU03"),
         ("title and one generic line", "ZEU03"),
         ("dismissal mentioning an earlier warning", "AUS05"),
+        ("residence permit", "URK09"),
     ],
 )
 def test_clear_pages_are_confident(name, category, cats):

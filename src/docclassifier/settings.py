@@ -33,9 +33,12 @@ class ClassifierSettings:
     phrase_cap: float
     similarity_full: float
     negative_penalty: float
+    heading_ratio: float
+    synonym_position_heading: float
     synonym_position_top: float
     synonym_position_middle: float
     synonym_position_bottom: float
+    phrase_position_heading: float
     phrase_position_top: float
     phrase_position_middle: float
     phrase_position_bottom: float

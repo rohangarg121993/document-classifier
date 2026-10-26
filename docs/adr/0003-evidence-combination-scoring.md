@@ -15,7 +15,8 @@ The first scoring model averaged weighted signals per page region and blended sc
 
 - **Strength** per category: each signal removes part of the remaining doubt,
   `1 − (1 − 0.95·synonyms)(1 − 0.60·phrases)(1 − 0.50·similarity) − 0.15·negatives`.
-- **Synonyms are titles.** One synonym is full evidence at the top of the page, 0.30 in the middle and 0.20 at the bottom. Shared synonyms are **not** discounted: a title shared by two siblings is still strong evidence against unrelated categories, and the tie is left to the decision layer (parent fallback). We measured discounting them, and it was worse on every check.
+- **Synonyms are titles, judged relative to the page.** One synonym is full evidence as a title: in the top third, or in large print anywhere (words ≥ 1.4× the page's median height). In running text it counts 0.5 (middle) or 0.4 (bottom), but **only relative to the most title-like synonym on the page**. A mention counts less when another document type is the title. On a page without a title, such as permits, ID documents and forms, the best-placed document-type name counts fully. Shared synonyms are **not** discounted: a title shared by two siblings is still strong evidence against unrelated categories, and the tie is left to the decision layer (parent fallback). We measured discounting them, and it was worse on every check.
+- **Text is Unicode-normalised (NFC)** before umlauts are mapped, because some PDFs store "ü" as "u" + a combining mark.
 - **Phrases** keep the cap of 3, the specificity discount and fuzzy weighting, plus position factors 1.0 / 0.8 / 0.7.
 - **Page position is a per-hit factor**, not a split. Evidence is gathered on the whole page. Per-category `weight_top/middle/bottom` CSV columns override the factors.
 - **Similarity** counts as full evidence at cosine 0.5.

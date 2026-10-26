@@ -53,11 +53,16 @@ similarity_full = 0.5
 # Subtracted from a category's strength per distinct negative-phrase hit.
 negative_penalty = 0.15
 
-# Where on the page a hit appears (thirds by vertical position). A synonym is a title: it counts fully only
-# at the top. Per-category overrides come from optional weight_top/middle/bottom CSV columns.
+# Where on the page a hit appears. A synonym is a document-type name: it counts fully as a title, i.e. in the
+# top third or in large print anywhere ("heading"), and less in running text further down.
+# Per-category overrides for top/middle/bottom come from optional weight_top/middle/bottom CSV columns.
+# Words at least this many times taller than the page's median word count as large print.
+heading_ratio = 1.4
+synonym_position_heading = 1.0
 synonym_position_top = 1.0
-synonym_position_middle = 0.30
-synonym_position_bottom = 0.20
+synonym_position_middle = 0.5
+synonym_position_bottom = 0.4
+phrase_position_heading = 1.0
 phrase_position_top = 1.0
 phrase_position_middle = 0.8
 phrase_position_bottom = 0.7

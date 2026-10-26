@@ -5,8 +5,8 @@ supporting ones gives a high strength, while a page without evidence stays near 
 
     strength = 1 - (1 - r_syn·synonyms)(1 - r_phr·phrases)(1 - r_sim·similarity) - penalty·negatives
 
-- synonyms: document-type names; one hit is full evidence, weighted by where it appears (a title counts
-  fully only at the top of the page);
+- synonyms: document-type names; one hit is full evidence, weighted by where it appears (a title, i.e. top of
+  the page or large print anywhere, counts fully);
 - phrases: content clues; distinct hits weighted by position, specificity and fuzziness, capped;
 - similarity: TF-IDF cosine to the category profile, relative to what a real matching page reaches.
 """
@@ -20,26 +20,28 @@ from docclassifier.classify.categories import Category, CategorySet
 from docclassifier.classify.decision import decide
 from docclassifier.classify.matching import MatchRules, PageMatcher
 from docclassifier.classify.normalize import normalize
-from docclassifier.classify.regions import split_regions
+from docclassifier.classify.regions import median_height, split_regions
 from docclassifier.classify.result import Candidate, ClassificationResult, KeywordMatch
 from docclassifier.ocr.models import PageText
 from docclassifier.settings import ClassifierSettings, Settings
 
 log = logging.getLogger(__name__)
 
-POSITIONS = ("top", "middle", "bottom")
+POSITIONS = ("heading", "top", "middle", "bottom")
 
 
 def classify(page: PageText, categories: CategorySet, settings: Settings) -> ClassificationResult:
     cfg = settings.classifier
     rules = MatchRules(cfg.min_prefix_length, cfg.min_fuzzy_length, cfg.fuzzy_threshold)
-    texts = {name: normalize(text) for name, text in split_regions(page).items()}
+    texts = {name: normalize(text) for name, text in split_regions(page, cfg.heading_ratio).items()}
     page_matcher = PageMatcher(texts["full"], rules)
     position_matchers = {p: PageMatcher(texts[p], rules) for p in POSITIONS}
     similarities = categories.similarities([texts["full"]])[0]
+    sizes = _word_sizes(page)
+    title_level = _title_level(categories, page_matcher, position_matchers, cfg)
 
     ranked = [
-        _score(category, categories, page_matcher, position_matchers, similarity, cfg)
+        _score(category, categories, page_matcher, position_matchers, sizes, similarity, title_level, cfg)
         for category, similarity in zip(categories, similarities)
     ]
     # Strongest first; sort is stable, so ties keep CSV order.
@@ -63,17 +65,25 @@ def _score(
     categories: CategorySet,
     page_matcher: PageMatcher,
     position_matchers: dict[str, PageMatcher],
+    sizes: list[tuple[str, float]],
     similarity: float,
+    title_level: float,
     cfg: ClassifierSettings,
 ) -> Candidate:
-    synonym_positions = _position_factors(category, cfg, "synonym")
+    # Synonyms are judged relative to the most title-like synonym on the page: running-text mentions count less
+    # only when some document type actually is the title; on a page without one, the best-placed name counts fully.
+    synonym_positions = {
+        p: min(1.0, f / title_level) if title_level else f for p, f in _position_factors(category, cfg, "synonym").items()
+    }
     phrase_positions = _position_factors(category, cfg, "phrase")
 
     # Synonyms are not discounted for being shared with a sibling: a shared title is still strong evidence
     # against unrelated categories, and the tie between siblings is resolved by the decision layer.
-    synonyms = _matches(category.synonyms, None, synonym_positions, page_matcher, position_matchers, cfg)
-    phrases = _matches(category.positive_phrases, categories, phrase_positions, page_matcher, position_matchers, cfg)
-    negatives = _matches(category.negative_phrases, None, None, page_matcher, position_matchers, cfg)
+    synonyms = _matches(category.synonyms, None, synonym_positions, page_matcher, position_matchers, sizes, cfg)
+    phrases = _matches(
+        category.positive_phrases, categories, phrase_positions, page_matcher, position_matchers, sizes, cfg
+    )
+    negatives = _matches(category.negative_phrases, None, None, page_matcher, position_matchers, sizes, cfg)
 
     synonym_evidence = min(1.0, sum(m.weight for m in synonyms) / cfg.synonym_cap)
     phrase_evidence = min(1.0, sum(m.weight for m in phrases) / cfg.phrase_cap)
@@ -100,7 +110,41 @@ def _score(
 
 
 def _position_factors(category: Category, cfg: ClassifierSettings, kind: str) -> dict[str, float]:
+    """Settings per position; the CSV's weight_top/middle/bottom columns override them for one category."""
     return {p: category.region_weights.get(p, getattr(cfg, f"{kind}_position_{p}")) for p in POSITIONS}
+
+
+def _title_level(
+    categories: CategorySet, page_matcher: PageMatcher, position_matchers: dict[str, PageMatcher], cfg: ClassifierSettings
+) -> float:
+    """The best synonym position factor of any synonym on the page, from the global settings (0: no synonyms)."""
+    factors = {p: getattr(cfg, f"synonym_position_{p}") for p in POSITIONS}
+    best = 0.0
+    for category in categories:
+        for synonym in category.synonyms:
+            key = _normalized_keyword(synonym)
+            if page_matcher.match(key) is None:
+                continue
+            seen = [factors[p] for p in POSITIONS if position_matchers[p].match(key)]
+            best = max(best, *(seen or [factors["middle"]]))  # across region boundaries: treat as running text
+            if best >= 1.0:
+                return best
+    return best
+
+
+def _word_sizes(page: PageText) -> list[tuple[str, float]]:
+    """(normalised word, height relative to the page's median word height) for every positioned word."""
+    typical = median_height(page.words)
+    if not typical:
+        return []
+    return [(normalize(w.text), round((w.y1 - w.y0) / typical, 2)) for w in page.words]
+
+
+def _size_of(key: str, sizes: list[tuple[str, float]]) -> float | None:
+    """Largest relative print size among words that start the keyword; None without word positions."""
+    first = key.split(" ", 1)[0]
+    found = [size for word, size in sizes if word and (word.startswith(first) or first.startswith(word))]
+    return max(found) if found else None
 
 
 def _matches(
@@ -109,6 +153,7 @@ def _matches(
     positions: dict[str, float] | None,
     page_matcher: PageMatcher,
     position_matchers: dict[str, PageMatcher],
+    sizes: list[tuple[str, float]],
     cfg: ClassifierSettings,
 ) -> list[KeywordMatch]:
     """Distinct keyword hits on the page.
@@ -132,7 +177,7 @@ def _matches(
             seen = [p for p in POSITIONS if position_matchers[p].match(key)]
             position = max(seen, key=positions.__getitem__) if seen else "middle"
             weight *= positions[position]
-        found[key] = KeywordMatch(keyword, kind, round(weight, 4), position)
+        found[key] = KeywordMatch(keyword, kind, round(weight, 4), position, _size_of(key, sizes))
     return list(found.values())
 
 
