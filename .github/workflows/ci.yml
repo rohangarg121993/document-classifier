@@ -8,21 +8,27 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Oldest supported and a current one. Plain pip, no uv or venv, like the target machines.
+        python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Tesseract (German + English)
         run: sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync
+        run: python -m pip install -r requirements-dev.txt
 
       - name: Tests
-        run: uv run python -m pytest -q
+        run: python -m pytest -q
 
       - name: Taxonomy self-check
         # Every category should recognise its own synthetic page with confidence >= 0.5. 12 categories currently
         # fail because sibling pairs share title synonyms (see the report); lower this as the taxonomy is fixed.
-        run: uv run python -m docclassifier selfcheck --categories config/categories.csv --max-failures 12
+        run: python docclassify.py selfcheck --categories config/categories.csv --max-failures 12

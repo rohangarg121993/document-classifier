@@ -4,12 +4,13 @@ import sys
 
 import pytest
 
-from conftest import REAL_CATEGORIES
+from conftest import REAL_CATEGORIES, REPO_ROOT
 
 
 def run_cli(*args):
+    # The launcher, not `-m docclassifier`, so the CLI runs without the package being installed.
     return subprocess.run(
-        [sys.executable, "-m", "docclassifier", *map(str, args)],
+        [sys.executable, str(REPO_ROOT / "docclassify.py"), *map(str, args)],
         capture_output=True, text=True, encoding="utf-8",
     )
 

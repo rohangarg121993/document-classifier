@@ -6,11 +6,17 @@ Spec: [#1](https://github.com/rohangarg121993/document-classifier/issues/1).
 
 ## Setup
 
-Requires Python ≥ 3.11, [uv](https://docs.astral.sh/uv/) and, for scanned pages, [Tesseract](https://github.com/tesseract-ocr/tesseract) with the `deu` and `eng` language data.
+Requires Python ≥ 3.10 and, for scanned pages, [Tesseract](https://github.com/tesseract-ocr/tesseract) with the `deu` and `eng` language data. Nothing else: no uv, no virtual environment, and the classifier itself is not installed. It runs from the checkout via `docclassify.py`.
 
 ```sh
-uv sync
+python -m pip install --user -r requirements.txt
 ```
+
+`requirements.txt` pins the exact versions from `uv.lock`. Drop `--user` to install for all users (admin shell). On Windows, use `py -3.10 -m pip …` / `py -3.10 docclassify.py …` to pick a specific Python.
+
+Offline target machine: on a connected machine with the **same Python version and OS**, run `python -m pip download -r requirements.txt -d wheels`, copy `wheels/` over with the repo, then `python -m pip install --user --no-index --find-links wheels -r requirements.txt`.
+
+Developing with [uv](https://docs.astral.sh/uv/) also works (`uv sync`, `python docclassify.py …`). After changing dependencies, regenerate the requirements with `uv export --no-dev --no-hashes --no-emit-project -o requirements.txt`.
 
 Tesseract is found via the `[ocr].tesseract_cmd` setting, then the `TESSERACT_CMD` environment variable, then `PATH`, then `C:\Program Files\Tesseract-OCR\tesseract.exe`.
 
@@ -18,19 +24,19 @@ Tesseract is found via the `[ocr].tesseract_cmd` setting, then the `TESSERACT_CM
 
 ```sh
 # One page → JSON
-uv run python -m docclassifier classify scan.pdf --page 2 --categories config/categories.csv
+python docclassify.py classify scan.pdf --page 2 --categories config/categories.csv
 
 # Every page of a file, or every PDF/PNG/JPG/TIFF in a folder → JSON Lines
-uv run python -m docclassifier classify inbox/ --categories config/categories.csv --workers 4
+python docclassify.py classify inbox/ --categories config/categories.csv --workers 4
 
 # Same, and write a review file with predictions pre-filled as labels
-uv run python -m docclassifier classify inbox/ --categories config/categories.csv --review-out review.csv
+python docclassify.py classify inbox/ --categories config/categories.csv --review-out review.csv
 
 # After correcting the wrong rows in review.csv: accuracy, confusion, misclassified pages
-uv run python -m docclassifier evaluate review.csv --categories config/categories.csv
+python docclassify.py evaluate review.csv --categories config/categories.csv
 
 # Can every category recognise a synthetic page built from its own definition? (no labelled data needed)
-uv run python -m docclassifier selfcheck --categories config/categories.csv
+python docclassify.py selfcheck --categories config/categories.csv
 ```
 
 `classify` options: `--settings my.toml` (override any default in `src/docclassifier/default_settings.toml`), `--include-text` (add page text to the output; off by default), `--no-cache`, `--force-ocr`, `--workers N`, `--review-out CSV`.
@@ -46,6 +52,9 @@ Each result also has a confidence, the top-3 candidates with a per-region score 
 From Python:
 
 ```python
+import sys
+sys.path.insert(0, "src")  # the classifier isn't installed; run from the repo root
+
 from docclassifier import classify, extract_page, load_categories, load_settings
 
 settings = load_settings()
@@ -72,12 +81,13 @@ Every number is a setting in `default_settings.toml`.
 ## Tests
 
 ```sh
-uv run python -m pytest
+python -m pip install --user -r requirements-dev.txt
+python -m pytest
 ```
 
 Tests marked `tesseract` are skipped when the Tesseract binary is missing. CI runs the full suite with Tesseract, plus `selfcheck` on `config/categories.csv`.
 
-> `python -m …` is used instead of the `docclassify` / `pytest` launchers because some managed Windows machines block executables inside `.venv\Scripts`.
+> `python docclassify.py` / `python -m pytest` are used instead of `.exe` launchers because some managed Windows machines block them.
 
 ## Data protection
 
