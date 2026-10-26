@@ -28,6 +28,15 @@ fuzzy_threshold = 90
 # A fuzzy hit counts this much of an exact hit.
 fuzzy_weight = 0.7
 
+# Region weights: thirds of the page by vertical position, plus the full page.
+# Per-category overrides come from optional weight_<region> columns in the category CSV.
+region_weight_top = 0.40
+region_weight_middle = 0.20
+region_weight_bottom = 0.15
+region_weight_full = 0.25
+# Regions with fewer non-space characters are skipped and their weight shared among the others.
+min_region_chars = 10
+
 [decision]
 # confidence = score_weight × top score + margin_weight × (top score − second score)
 confidence_score_weight = 0.7

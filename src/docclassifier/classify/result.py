@@ -18,6 +18,17 @@ class KeywordMatch:
 
 
 @dataclass(frozen=True)
+class RegionScore:
+    weight: float  # effective weight after sharing out empty regions
+    score: float
+    synonym_score: float
+    phrase_score: float
+    similarity: float
+    matched_synonyms: list[KeywordMatch] = field(default_factory=list)
+    matched_phrases: list[KeywordMatch] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class Candidate:
     category_id: str
     category_name: str
@@ -30,6 +41,8 @@ class Candidate:
     matched_synonyms: list[KeywordMatch] = field(default_factory=list)
     matched_phrases: list[KeywordMatch] = field(default_factory=list)
     matched_negatives: list[KeywordMatch] = field(default_factory=list)
+    # Per-region breakdown (top, middle, bottom, full); regions with too little text are absent.
+    regions: dict[str, RegionScore] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
