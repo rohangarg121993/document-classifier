@@ -29,12 +29,22 @@ class ClassifierSettings:
 
 
 @dataclass(frozen=True)
+class DecisionSettings:
+    confidence_score_weight: float
+    confidence_margin_weight: float
+    threshold: float
+    min_text_chars: int
+    fallback_category_id: str
+
+
+@dataclass(frozen=True)
 class Settings:
     ocr: OcrSettings
     classifier: ClassifierSettings
+    decision: DecisionSettings
 
 
-_SECTIONS = {"ocr": OcrSettings, "classifier": ClassifierSettings}
+_SECTIONS = {"ocr": OcrSettings, "classifier": ClassifierSettings, "decision": DecisionSettings}
 
 
 def load_settings(path: str | Path | None = None) -> Settings:
