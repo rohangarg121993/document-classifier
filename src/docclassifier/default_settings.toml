@@ -1,0 +1,12 @@
+# Default settings shipped with docclassifier.
+# Override any subset of keys in your own TOML file and pass it with --settings.
+
+[ocr]
+# Tesseract language packs, joined with "+".
+languages = "deu+eng"
+
+[classifier]
+# Number of distinct keyword hits that counts as full evidence.
+keyword_cap = 3
+# How many candidate categories to report.
+top_n = 3
