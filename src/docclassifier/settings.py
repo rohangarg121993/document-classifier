@@ -26,26 +26,30 @@ class OcrSettings:
 @dataclass(frozen=True)
 class ClassifierSettings:
     top_n: int
-    synonym_weight: float
-    phrase_weight: float
-    similarity_weight: float
-    keyword_cap: float
+    synonym_reliability: float
+    phrase_reliability: float
+    similarity_reliability: float
+    synonym_cap: float
+    phrase_cap: float
+    similarity_full: float
     negative_penalty: float
+    heading_ratio: float
+    synonym_position_heading: float
+    synonym_position_top: float
+    synonym_position_middle: float
+    synonym_position_bottom: float
+    phrase_position_heading: float
+    phrase_position_top: float
+    phrase_position_middle: float
+    phrase_position_bottom: float
     min_prefix_length: int
     min_fuzzy_length: int
     fuzzy_threshold: float
     fuzzy_weight: float
-    region_weight_top: float
-    region_weight_middle: float
-    region_weight_bottom: float
-    region_weight_full: float
-    min_region_chars: int
 
 
 @dataclass(frozen=True)
 class DecisionSettings:
-    confidence_score_weight: float
-    confidence_margin_weight: float
     threshold: float
     min_text_chars: int
     fallback_category_id: str

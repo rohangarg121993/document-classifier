@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
     check = sub.add_parser("selfcheck", help="check each category against a synthetic page built from its definition")
     check.add_argument("--categories", required=True, help="category CSV file")
     check.add_argument("--settings", help="TOML file overriding default settings")
-    check.add_argument("--min-margin", type=float, default=0.05, help="lead over the runner-up needed to pass")
+    check.add_argument("--min-confidence", type=float, default=0.5, help="confidence a category needs on its own page")
     check.add_argument("--max-failures", type=int, default=0, help="exit non-zero only above this many failures")
     check.add_argument("--json", action="store_true", help="print the full report as JSON")
     ev = sub.add_parser("evaluate", help="measure accuracy against a label file or corrected review file")
@@ -100,7 +100,7 @@ def _selfcheck(args, settings) -> int:
     except CategoryFileError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    report = selfcheck(categories, settings, args.min_margin)
+    report = selfcheck(categories, settings, args.min_confidence)
     sys.stdout.reconfigure(encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2) if args.json else format_report(report))
     return 1 if report["summary"]["failed"] > args.max_failures else 0

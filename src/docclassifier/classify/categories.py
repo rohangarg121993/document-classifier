@@ -31,7 +31,7 @@ REQUIRED_COLUMNS = (
     "negative_phrases",
     "parent_category",
 )
-REGIONS = ("top", "middle", "bottom", "full")
+REGIONS = ("top", "middle", "bottom")
 
 
 class CategoryFileError(ValueError):
@@ -47,7 +47,7 @@ class Category:
     positive_phrases: list[str]
     negative_phrases: list[str]
     parent: str
-    # Per-category region weight overrides from optional `weight_<region>` columns; missing regions use settings.
+    # Per-category position factors from optional weight_top/middle/bottom columns; missing ones use settings.
     region_weights: dict[str, float] = field(default_factory=dict)
 
 
@@ -126,7 +126,7 @@ def load_categories(path: str | Path) -> CategorySet:
     for warning in warnings:
         log.debug("%s", warning)
     if warnings:
-        log.warning("%d synonym(s) are shared between categories; see CategorySet.warnings or debug logs", len(warnings))
+        log.info("%d synonym(s) are shared between categories; run selfcheck for details", len(warnings))
     return CategorySet(categories, warnings)
 
 

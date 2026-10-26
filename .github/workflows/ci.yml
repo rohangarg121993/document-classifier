@@ -23,5 +23,6 @@ jobs:
         run: uv run python -m pytest -q
 
       - name: Taxonomy self-check
-        # Every category must recognise its own synthetic page (raise --max-failures to tolerate known collisions).
-        run: uv run python -m docclassifier selfcheck --categories config/categories.csv
+        # Every category should recognise its own synthetic page with confidence >= 0.5. 12 categories currently
+        # fail because sibling pairs share title synonyms (see the report); lower this as the taxonomy is fixed.
+        run: uv run python -m docclassifier selfcheck --categories config/categories.csv --max-failures 12

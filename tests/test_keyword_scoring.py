@@ -29,7 +29,7 @@ def cats(tmp_path):
 def run(text, cats, **classifier_overrides):
     """Classify with similarity switched off, so scores reflect keyword evidence only."""
     settings = load_settings()
-    classifier = replace(settings.classifier, similarity_weight=0, **classifier_overrides)
+    classifier = replace(settings.classifier, similarity_reliability=0, **classifier_overrides)
     return classify(page_of(text), cats, replace(settings, classifier=classifier))
 
 
@@ -97,8 +97,8 @@ def test_cap_limits_score(cats):
 
     assert candidate(three, "DIS01").score > candidate(two, "DIS01").score
     # With cap 2, the third phrase adds nothing.
-    capped2 = run("Pflichtverletzung Personalakte", cats, keyword_cap=2)
-    capped3 = run("Pflichtverletzung Personalakte arbeitsrechtliche Konsequenzen", cats, keyword_cap=2)
+    capped2 = run("Pflichtverletzung Personalakte", cats, phrase_cap=2)
+    capped3 = run("Pflichtverletzung Personalakte arbeitsrechtliche Konsequenzen", cats, phrase_cap=2)
     assert candidate(capped2, "DIS01").score == candidate(capped3, "DIS01").score
 
 
@@ -130,6 +130,18 @@ def test_breakdown_in_cli_json_shape(cats):
     data = result.to_dict()
 
     best = data["candidates"][0]
-    assert best["matched_synonyms"] == [{"keyword": "Abmahnung", "kind": "exact", "weight": 1.0}]
+    assert best["matched_synonyms"] == [
+        {"keyword": "Abmahnung", "kind": "exact", "weight": 1.0, "position": "top", "size": 1.0}
+    ]
     assert best["matched_phrases"][0]["kind"] == "fuzzy"
     assert "candidates_all" not in data  # full ranking is for the API, not the JSON output
+
+
+def test_decomposed_umlauts_match_exactly(cats):
+    # Some PDFs store "ü" as "u" + a combining diaeresis (Unicode NFD).
+    import unicodedata
+
+    result = run(unicodedata.normalize("NFD", "Ärztliche Datenschutzerklärung und Vertraulichkeit"), cats)
+
+    best = candidate(result, "VPF01")
+    assert [(m.keyword, m.kind) for m in best.matched_synonyms] == [("Datenschutzerklaerung", "exact")]

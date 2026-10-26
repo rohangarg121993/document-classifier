@@ -1,6 +1,9 @@
-"""Decision layer, exercised through `classify` with similarity off so scores are hand-checkable.
+"""Decision layer, exercised through `classify` with similarity off so strengths are hand-checkable.
 
-Keyword scores below: synonym evidence × 0.35 + phrase evidence × 0.25, evidence = min(1, hits / 3).
+With similarity off and every word at the top of the page:
+    strength = 1 − (1 − 0.95·synonym evidence)(1 − 0.60·phrase evidence)
+    synonym evidence = min(1, hits / 1), phrase evidence = min(1, hits / 3)
+    confidence = s1 · (1 − (1 − s1) / (1 − s2))
 """
 
 from dataclasses import replace
@@ -18,6 +21,10 @@ ROWS = [
     "DIS01,Abmahnungen,x,Abmahnung; abgemahnt,Pflichtverletzung; Personalakte,,Disziplinar",
     "SON02,sonstiges,x,sonstiges,,,Sonstiges",
 ]
+# DIS01 with a synonym and two phrases: 1 − 0.05 · (1 − 0.6·2/3) = 0.97
+STRONG = "Abmahnung abgemahnt Pflichtverletzung Personalakte"
+# DIS01 with one phrase only: 0.6 · 1/3 = 0.2 → confidence 0.2 · (1 − 0.8/1) = 0.04
+WEAK = "Betreff: Personalakte vom Mai"
 
 
 @pytest.fixture
@@ -31,37 +38,36 @@ def decide(text, cats, classifier=None, decision=None):
     settings = load_settings()
     settings = replace(
         settings,
-        classifier=replace(settings.classifier, similarity_weight=0, **(classifier or {})),
+        classifier=replace(settings.classifier, similarity_reliability=0, **(classifier or {})),
         decision=replace(settings.decision, **(decision or {})),
     )
     return classify(page_of(text), cats, settings)
 
 
-def test_confidence_blends_top_score_and_margin(cats):
-    # DIS01: 0.35·2/3 + 0.25·2/3 = 0.40, nothing else matches → 0.7·0.40 + 0.3·0.40
-    alone = decide("Abmahnung abgemahnt Pflichtverletzung Personalakte", cats)
-    # ZEU01 now scores 0.35·1/3 ≈ 0.1167 → 0.7·0.40 + 0.3·(0.40 − 0.1167) = 0.365
-    contested = decide("Abmahnung abgemahnt Pflichtverletzung Personalakte Arbeitszeugnis", cats)
+def test_confidence_compares_doubt_of_winner_and_runner_up(cats):
+    # Alone: runner-up strength 0 → 0.97 · (1 − 0.03/1) = 0.9409
+    alone = decide(STRONG, cats)
+    # ZEU01 gets a synonym hit (0.95) → 0.97 · (1 − 0.03/0.05) = 0.388
+    contested = decide(STRONG + " Arbeitszeugnis", cats)
 
-    assert alone.confidence == pytest.approx(0.40, abs=1e-3)
-    assert contested.confidence == pytest.approx(0.365, abs=1e-3)
-    assert contested.category_id == "DIS01"
+    assert alone.confidence == pytest.approx(0.9409, abs=1e-3)
+    assert contested.confidence == pytest.approx(0.388, abs=1e-3)
+    assert contested.candidates[0].category_id == "DIS01"
 
 
 def test_low_confidence_is_unclassified_with_candidates(cats):
-    # DIS01 alone: 0.35·1/3 ≈ 0.117 → confidence 0.117 < 0.30
-    result = decide("Betreff: Abmahnung vom Mai", cats)
+    result = decide(WEAK, cats)
 
     assert result.status == "unclassified"
     assert result.reason == "low_confidence"
     assert result.category_id == "UNCLASSIFIED"
-    assert result.confidence == pytest.approx(0.117, abs=1e-3)
+    assert result.confidence == pytest.approx(0.04, abs=1e-3)
     assert [c.category_id for c in result.candidates][0] == "DIS01"
     assert len(result.candidates) == 3
 
 
 def test_threshold_is_configurable(cats):
-    result = decide("Betreff: Abmahnung vom Mai", cats, decision={"threshold": 0.1})
+    result = decide(WEAK, cats, decision={"threshold": 0.01})
 
     assert result.status == "classified"
     assert result.reason is None
@@ -77,28 +83,28 @@ def test_nearly_empty_page_is_insufficient_text(cats):
 
 
 def test_confident_parent_when_siblings_tie(cats):
-    # keyword_cap 1: ZEU01 and ZEU05 both saturate synonyms → 0.35 each, margin 0
-    # → child confidence 0.7·0.35 = 0.245 < 0.30, but parent "Zeugnisse" scores 0.35 against 0 → 0.35
-    result = decide("Endzeugnis Arbeitszeugnis Abschlusszeugnis", cats, classifier={"keyword_cap": 1})
+    # ZEU01 and ZEU05 both have a synonym hit → 0.95 each → child confidence 0.95 · (1 − 0.05/0.05) = 0
+    # Parent "Zeugnisse" 0.95 against nothing → 0.95 · 0.95 = 0.9025
+    result = decide("Endzeugnis Arbeitszeugnis Abschlusszeugnis", cats)
 
     assert result.status == "parent_only"
     assert result.reason == "low_confidence"
     assert result.category_id == "UNCLASSIFIED"
     assert result.parent_category == "Zeugnisse"
-    assert result.confidence == pytest.approx(0.245, abs=1e-3)
-    assert result.parent_confidence == pytest.approx(0.35, abs=1e-3)
+    assert result.confidence == pytest.approx(0.0, abs=1e-3)
+    assert result.parent_confidence == pytest.approx(0.9025, abs=1e-3)
 
 
 def test_classified_result_reports_parent_confidence(cats):
-    result = decide("Abmahnung abgemahnt Pflichtverletzung Personalakte", cats)
+    result = decide(STRONG, cats)
 
     assert result.status == "classified"
     assert result.parent_category == "Disziplinar"
-    assert result.parent_confidence == pytest.approx(0.40, abs=1e-3)
+    assert result.parent_confidence == pytest.approx(0.9409, abs=1e-3)
 
 
 def test_fallback_category_replaces_unclassified(cats):
-    result = decide("Betreff: Abmahnung vom Mai", cats, decision={"fallback_category_id": "SON02"})
+    result = decide(WEAK, cats, decision={"fallback_category_id": "SON02"})
 
     assert result.status == "fallback"
     assert result.reason == "low_confidence"
@@ -109,7 +115,7 @@ def test_fallback_category_replaces_unclassified(cats):
 
 def test_unknown_fallback_category_is_rejected(cats):
     with pytest.raises(ValueError, match="fallback_category_id 'NOPE'"):
-        decide("Betreff: Abmahnung vom Mai", cats, decision={"fallback_category_id": "NOPE"})
+        decide(WEAK, cats, decision={"fallback_category_id": "NOPE"})
 
 
 def test_ties_go_to_csv_order(cats):

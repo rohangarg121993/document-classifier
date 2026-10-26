@@ -14,18 +14,9 @@ class KeywordMatch:
 
     keyword: str
     kind: Literal["exact", "prefix", "fuzzy"]
-    weight: float  # specificity × (1 for exact/prefix, fuzzy_weight for fuzzy)
-
-
-@dataclass(frozen=True)
-class RegionScore:
-    weight: float  # effective weight after sharing out empty regions
-    score: float
-    synonym_score: float
-    phrase_score: float
-    similarity: float
-    matched_synonyms: list[KeywordMatch] = field(default_factory=list)
-    matched_phrases: list[KeywordMatch] = field(default_factory=list)
+    weight: float  # position factor × specificity × (1 for exact/prefix, fuzzy_weight for fuzzy)
+    position: Literal["heading", "top", "middle", "bottom", "page"] = "page"  # "page": negatives, position-free
+    size: float | None = None  # print size relative to the page's median word; ≥ heading_ratio means large print
 
 
 @dataclass(frozen=True)
@@ -33,16 +24,14 @@ class Candidate:
     category_id: str
     category_name: str
     parent_category: str
-    score: float
-    synonym_score: float = 0.0
-    phrase_score: float = 0.0
-    similarity: float = 0.0
+    score: float  # evidence strength, 0-1
+    synonym_score: float = 0.0  # synonym evidence, 0-1
+    phrase_score: float = 0.0  # phrase evidence, 0-1
+    similarity: float = 0.0  # raw cosine similarity to the category profile
     negative_penalty: float = 0.0
     matched_synonyms: list[KeywordMatch] = field(default_factory=list)
     matched_phrases: list[KeywordMatch] = field(default_factory=list)
     matched_negatives: list[KeywordMatch] = field(default_factory=list)
-    # Per-region breakdown (top, middle, bottom, full); regions with too little text are absent.
-    regions: dict[str, RegionScore] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

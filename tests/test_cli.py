@@ -79,3 +79,19 @@ def test_no_cache_flag_leaves_no_cache_behind(make_scan, categories_csv, tmp_pat
     assert out["ocr_quality"] == "ok"
     assert out["handwriting_suspected"] is False
     assert not (tmp_path / ".cache").exists()
+
+
+def test_classify_does_not_print_taxonomy_warnings(make_pdf):
+    pdf = make_pdf([[(80, "Abmahnung wegen Pflichtverletzung am 3. Mai")]])
+
+    proc = run_cli("classify", pdf, "--page", 1, "--categories", REAL_CATEGORIES)
+
+    assert proc.returncode == 0
+    assert "shared" not in proc.stderr  # taxonomy hygiene belongs to selfcheck, not every classification
+
+
+def test_selfcheck_reports_shared_synonyms():
+    proc = run_cli("selfcheck", "--categories", REAL_CATEGORIES)
+
+    assert "28 synonym(s) are shared" in proc.stdout
+    assert "endzeugnis" in proc.stdout

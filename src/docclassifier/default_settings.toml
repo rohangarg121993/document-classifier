@@ -35,16 +35,37 @@ dir = ".cache/ocr"
 # How many candidate categories to report.
 top_n = 3
 
-# Signal weights inside a region score.
-synonym_weight = 0.35
-phrase_weight = 0.25
-# Cosine similarity of the page to the category profile (TF-IDF on character n-grams).
-similarity_weight = 0.40
+# Evidence model (ADR-0003). Each signal removes part of the remaining doubt:
+#   strength = 1 - (1 - synonym_reliability * synonym evidence)
+#                * (1 - phrase_reliability * phrase evidence)
+#                * (1 - similarity_reliability * similarity evidence)
+#              - negative_penalty * negative hits
+synonym_reliability = 0.95
+phrase_reliability = 0.60
+similarity_reliability = 0.50
 
-# Distinct keyword hits (after specificity and fuzzy weighting) that count as full evidence.
-keyword_cap = 3
-# Subtracted from a category's score per distinct negative-phrase hit.
+# Distinct hits (after position, specificity and fuzzy weighting) that count as full evidence.
+# One synonym (a document-type name) is enough; content phrases need several.
+synonym_cap = 1
+phrase_cap = 3
+# Cosine similarity to the category profile that counts as full similarity evidence.
+similarity_full = 0.5
+# Subtracted from a category's strength per distinct negative-phrase hit.
 negative_penalty = 0.15
+
+# Where on the page a hit appears. A synonym is a document-type name: it counts fully as a title, i.e. in the
+# top third or in large print anywhere ("heading"), and less in running text further down.
+# Per-category overrides for top/middle/bottom come from optional weight_top/middle/bottom CSV columns.
+# Words at least this many times taller than the page's median word count as large print.
+heading_ratio = 1.4
+synonym_position_heading = 1.0
+synonym_position_top = 1.0
+synonym_position_middle = 0.5
+synonym_position_bottom = 0.4
+phrase_position_heading = 1.0
+phrase_position_top = 1.0
+phrase_position_middle = 0.8
+phrase_position_bottom = 0.7
 
 # Keywords at least this long (normalised) also match the start of longer words (German compounds).
 min_prefix_length = 6
@@ -54,24 +75,14 @@ fuzzy_threshold = 90
 # A fuzzy hit counts this much of an exact hit.
 fuzzy_weight = 0.7
 
-# Region weights: thirds of the page by vertical position, plus the full page.
-# Per-category overrides come from optional weight_<region> columns in the category CSV.
-region_weight_top = 0.40
-region_weight_middle = 0.20
-region_weight_bottom = 0.15
-region_weight_full = 0.25
-# Regions with fewer non-space characters are skipped and their weight shared among the others.
-min_region_chars = 10
-
 [decision]
-# confidence = score_weight × top score + margin_weight × (top score − second score)
-confidence_score_weight = 0.7
-confidence_margin_weight = 0.3
-# Below this confidence the page is UNCLASSIFIED (reason "low_confidence").
-threshold = 0.30
+# confidence = winner strength × (1 - doubt of winner / doubt of runner-up), doubt = 1 - strength.
+# Below this confidence the page is UNCLASSIFIED (reason "low_confidence") or, if one parent category is
+# clear, "parent_only".
+threshold = 0.50
 # Pages with fewer non-space characters are UNCLASSIFIED (reason "insufficient_text").
 min_text_chars = 20
 # Map every UNCLASSIFIED result to this category (e.g. "SON02"); empty keeps UNCLASSIFIED visible.
 fallback_category_id = ""
 # Confidence ceiling for pages suspected to be handwritten; below the threshold, so they go to review.
-handwriting_confidence_cap = 0.25
+handwriting_confidence_cap = 0.45

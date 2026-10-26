@@ -9,6 +9,7 @@ _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 def normalize(text: str) -> str:
     """Lowercase, spell out umlauts and ß, strip other accents, reduce to words separated by single spaces."""
-    text = text.lower().translate(_GERMAN)
+    # NFC first: some PDFs store "ü" as "u" + combining diaeresis, which the umlaut mapping would miss.
+    text = unicodedata.normalize("NFC", text).lower().translate(_GERMAN)
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
     return _NON_ALNUM.sub(" ", text).strip()
