@@ -11,6 +11,7 @@ from PIL import Image, ImageOps
 from docclassifier.ocr import cache
 from docclassifier.ocr.engines import OcrUnavailableError, create_engine
 from docclassifier.ocr.models import PageText, Word
+from docclassifier.ocr.quality import assess
 from docclassifier.settings import Settings
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg"}
@@ -102,8 +103,12 @@ def _ocr(image: Image.Image, page_number: int, settings: Settings) -> PageText:
         # Tesseract reports the clockwise rotation that makes the text upright; PIL rotates counter-clockwise.
         image = image.rotate(-rotate, expand=True, fillcolor=255)
     words = engine.extract(image)
+    quality, handwriting = assess(image, words, settings.ocr)
     lines = [" ".join(w.text for w in group) for _, group in groupby(words, key=lambda w: w.line)]
-    return PageText("\n".join(lines), words, float(image.width), float(image.height), "ocr", page_number)
+    return PageText(
+        "\n".join(lines), words, float(image.width), float(image.height), "ocr", page_number,
+        ocr_quality=quality, handwriting_suspected=handwriting,
+    )
 
 
 def _check_range(path: Path, page_number: int, count: int) -> None:

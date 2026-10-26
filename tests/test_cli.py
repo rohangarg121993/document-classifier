@@ -74,5 +74,8 @@ def test_no_cache_flag_leaves_no_cache_behind(make_scan, categories_csv, tmp_pat
     proc = run_cli("classify", scan, "--page", 1, "--categories", categories_csv, "--no-cache")
 
     assert proc.returncode == 0, proc.stderr
-    assert json.loads(proc.stdout)["extraction_method"] == "ocr"
+    out = json.loads(proc.stdout)
+    assert out["extraction_method"] == "ocr"
+    assert out["ocr_quality"] == "ok"
+    assert out["handwriting_suspected"] is False
     assert not (tmp_path / ".cache").exists()

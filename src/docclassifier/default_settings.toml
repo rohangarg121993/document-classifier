@@ -15,6 +15,16 @@ force_ocr = false
 # Embedded PDF text with fewer non-space characters counts as missing, so the page is OCR'd.
 min_native_chars = 20
 
+# Handwriting / OCR quality heuristics (v1 detects handwriting, it does not read it).
+# Pages with less ink than this share of their area are treated as blank.
+min_ink_ratio = 0.002
+# Words at or above this Tesseract confidence (0-100) count as recognised.
+handwriting_min_word_confidence = 60
+# Suspect handwriting when at least this share of the ink lies outside recognised words.
+handwriting_unrecognised_ink = 0.5
+# ocr_quality is "low" when the character-weighted mean word confidence is below this.
+low_quality_mean_confidence = 60
+
 [cache]
 # Cache OCR results on disk. Entries contain page text (personal data): keep the directory local and
 # git-ignored (ADR-0001).
@@ -63,3 +73,5 @@ threshold = 0.30
 min_text_chars = 20
 # Map every UNCLASSIFIED result to this category (e.g. "SON02"); empty keeps UNCLASSIFIED visible.
 fallback_category_id = ""
+# Confidence ceiling for pages suspected to be handwritten; below the threshold, so they go to review.
+handwriting_confidence_cap = 0.25

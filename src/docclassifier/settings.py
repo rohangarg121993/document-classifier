@@ -17,6 +17,10 @@ class OcrSettings:
     dpi: int
     force_ocr: bool
     min_native_chars: int
+    min_ink_ratio: float
+    handwriting_min_word_confidence: float
+    handwriting_unrecognised_ink: float
+    low_quality_mean_confidence: float
 
 
 @dataclass(frozen=True)
@@ -45,6 +49,7 @@ class DecisionSettings:
     threshold: float
     min_text_chars: int
     fallback_category_id: str
+    handwriting_confidence_cap: float
 
 
 @dataclass(frozen=True)

@@ -10,13 +10,20 @@ from docclassifier.settings import DecisionSettings
 
 
 def decide(
-    ranked: list[Candidate], text_chars: int, top_n: int, categories: CategorySet, cfg: DecisionSettings
+    ranked: list[Candidate],
+    text_chars: int,
+    top_n: int,
+    categories: CategorySet,
+    cfg: DecisionSettings,
+    handwriting_suspected: bool = False,
 ) -> ClassificationResult:
     """`ranked` holds every category, best first. `text_chars` counts the page's non-space characters.
 
+    Suspected handwriting caps the confidence (OCR text is unreliable), which normally sends the page to review.
     When `fallback_category_id` is set, any result without a category is mapped to that category.
     """
-    result = _decide(ranked, text_chars, top_n, cfg)
+    cap = cfg.handwriting_confidence_cap if handwriting_suspected else 1.0
+    result = _decide(ranked, text_chars, top_n, cfg, cap)
     if result.category_id != UNCLASSIFIED or not cfg.fallback_category_id:
         return result
     fallback = next((c for c in categories if c.category_id == cfg.fallback_category_id), None)
@@ -28,10 +35,13 @@ def decide(
     )
 
 
-def _decide(ranked: list[Candidate], text_chars: int, top_n: int, cfg: DecisionSettings) -> ClassificationResult:
+def _decide(
+    ranked: list[Candidate], text_chars: int, top_n: int, cfg: DecisionSettings, cap: float
+) -> ClassificationResult:
     candidates = ranked[:top_n]
-    confidence = _confidence([c.score for c in ranked], cfg)
+    confidence = min(cap, _confidence([c.score for c in ranked], cfg))
     parent, parent_confidence = _best_parent(ranked, cfg)
+    parent_confidence = min(cap, parent_confidence)
 
     if text_chars < cfg.min_text_chars:
         return _unclassified("insufficient_text", confidence, candidates, ranked)
