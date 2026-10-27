@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-import tomllib
+import sys
 from dataclasses import dataclass, fields
 from importlib import resources
 from pathlib import Path
 from typing import Any
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # Python 3.10: same API, from the tomli backport
+    import tomli as tomllib
 
 
 @dataclass(frozen=True)

@@ -3,13 +3,14 @@ name = "docclassifier"
 version = "0.1.0"
 description = "Rule-based document page classifier: offline OCR plus keyword and similarity scoring against a category CSV"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "pillow>=10",
     "pymupdf>=1.24",
     "pytesseract>=0.3.10",
     "rapidfuzz>=3",
     "scikit-learn>=1.4",
+    "tomli>=2; python_version < '3.11'",
 ]
 
 [project.scripts]
@@ -29,6 +30,7 @@ packages = ["src/docclassifier"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 markers = [
     "tesseract: needs the Tesseract binary installed",
 ]

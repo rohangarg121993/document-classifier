@@ -1,0 +1,80 @@
+# Pinned runtime dependencies, exported from uv.lock. Install with: python -m pip install -r requirements.txt
+# Regenerate after changing dependencies: uv export --no-dev --no-hashes --no-emit-project -o requirements.txt
+cloudpickle==3.1.2
+    # via joblib
+flatbuffers==25.12.19 ; python_full_version >= '3.11'
+    # via onnxruntime
+joblib==1.6.0
+    # via scikit-learn
+narwhals==2.27.1 ; python_full_version >= '3.11'
+    # via scikit-learn
+networkx==3.6.1 ; python_full_version == '3.11.*'
+    # via pymupdf
+networkx==3.7 ; python_full_version >= '3.12'
+    # via pymupdf
+numpy==2.2.6 ; python_full_version < '3.11'
+    # via
+    #   scikit-learn
+    #   scipy
+numpy==2.4.6 ; python_full_version == '3.11.*'
+    # via
+    #   onnxruntime
+    #   pymupdf
+    #   scikit-learn
+    #   scipy
+numpy==2.5.4 ; python_full_version >= '3.12'
+    # via
+    #   onnxruntime
+    #   pymupdf
+    #   scikit-learn
+    #   scipy
+onnxruntime==1.31.0 ; python_full_version >= '3.11'
+    # via pymupdf
+packaging==26.3
+    # via
+    #   onnxruntime
+    #   pytesseract
+pillow==12.3.0 ; python_full_version < '3.11'
+    # via
+    #   docclassifier
+    #   pytesseract
+pillow==13.0.0 ; python_full_version >= '3.11'
+    # via
+    #   docclassifier
+    #   pytesseract
+protobuf==7.36.2 ; python_full_version >= '3.11'
+    # via onnxruntime
+psutil==7.2.2 ; python_full_version >= '3.11'
+    # via pymupdf
+pymupdf==1.28.2 ; python_full_version < '3.11'
+    # via docclassifier
+pymupdf==2.0 ; python_full_version >= '3.11'
+    # via docclassifier
+pymupdf-layout==2.0 ; python_full_version >= '3.11'
+    # via pymupdf
+pymupdf4llm==2.0 ; python_full_version >= '3.11'
+    # via pymupdf
+pytesseract==0.3.13
+    # via docclassifier
+pyyaml==6.0.3 ; python_full_version >= '3.11'
+    # via pymupdf
+rapidfuzz==3.14.5 ; python_full_version < '3.11'
+    # via docclassifier
+rapidfuzz==3.14.6 ; python_full_version >= '3.11'
+    # via docclassifier
+scikit-learn==1.7.2 ; python_full_version < '3.11'
+    # via docclassifier
+scikit-learn==1.9.1 ; python_full_version >= '3.11'
+    # via docclassifier
+scipy==1.15.3 ; python_full_version < '3.11'
+    # via scikit-learn
+scipy==1.17.1 ; python_full_version == '3.11.*'
+    # via scikit-learn
+scipy==1.18.1 ; python_full_version >= '3.12'
+    # via scikit-learn
+tabulate==0.10.0 ; python_full_version >= '3.11'
+    # via pymupdf
+threadpoolctl==3.7.0
+    # via scikit-learn
+tomli==2.5.0 ; python_full_version < '3.11'
+    # via docclassifier
