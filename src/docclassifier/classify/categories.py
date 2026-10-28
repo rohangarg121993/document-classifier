@@ -54,9 +54,11 @@ class Category:
 class CategorySet(Sequence[Category]):
     """The loaded categories in CSV order, plus load warnings and keyword specificity weights."""
 
-    def __init__(self, categories: list[Category], warnings: list[str]):
+    def __init__(self, categories: list[Category], warnings: list[str], examples: tuple[tuple[str, str], ...] = ()):
         self._categories = categories
         self.warnings = warnings
+        # (category_id, normalised page text) for pages a person validated (ADR-0004).
+        self._examples = tuple(e for e in examples if any(c.category_id == e[0] for c in categories))
         listing = defaultdict(set)
         for c in categories:
             for keyword in c.synonyms + c.positive_phrases:
@@ -78,13 +80,41 @@ class CategorySet(Sequence[Category]):
         # Rows are L2-normalised by TfidfVectorizer, so the dot product is the cosine.
         return (vectorizer.transform([normalize(t) for t in texts]) @ profiles.T).toarray().tolist()
 
+    def with_examples(self, examples: list[tuple[str, str]]) -> CategorySet:
+        """The same categories plus validated example pages, as (category_id, page text)."""
+        return CategorySet(self._categories, self.warnings, tuple((cid, normalize(t)) for cid, t in examples))
+
+    def example_similarities(self, text: str) -> list[float]:
+        """For each category in CSV order, the cosine similarity to its most similar validated page (0: none)."""
+        best = [0.0] * len(self._categories)
+        if not self._examples:
+            return best
+        vectorizer, matrix = self._example_tfidf
+        index = {c.category_id: i for i, c in enumerate(self._categories)}
+        cosines = (matrix @ vectorizer.transform([normalize(text)]).T).toarray()[:, 0]
+        for (category_id, _), cosine in zip(self._examples, cosines):
+            i = index[category_id]
+            best[i] = max(best[i], float(cosine))
+        return best
+
     @cached_property
     def _tfidf(self):
-        documents = [
+        vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), sublinear_tf=True)
+        return vectorizer, vectorizer.fit_transform(self._profiles)
+
+    @cached_property
+    def _example_tfidf(self):
+        # Fitted on profiles and examples together, so letter sequences common to all German text weigh little.
+        texts = [text for _, text in self._examples]
+        vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), sublinear_tf=True)
+        vectorizer.fit(self._profiles + texts)
+        return vectorizer, vectorizer.transform(texts)
+
+    @cached_property
+    def _profiles(self) -> list[str]:
+        return [
             normalize(" ".join([c.name, c.description, *c.synonyms, *c.positive_phrases])) for c in self._categories
         ]
-        vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), sublinear_tf=True)
-        return vectorizer, vectorizer.fit_transform(documents)
 
     def __getitem__(self, index):
         return self._categories[index]

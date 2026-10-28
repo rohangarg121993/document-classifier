@@ -145,3 +145,39 @@ def test_decomposed_umlauts_match_exactly(cats):
 
     best = candidate(result, "VPF01")
     assert [(m.keyword, m.kind) for m in best.matched_synonyms] == [("Datenschutzerklaerung", "exact")]
+
+
+CONTRACT_ROWS = [
+    "AUS05,Kündigung,x,Kündigung,,,Austritt",
+    "VTR01,Befristeter Arbeitsvertrag,x,befristeter Arbeitsvertrag,,,Arbeitsvertrag",
+]
+
+
+@pytest.fixture
+def contract_cats(tmp_path):
+    path = tmp_path / "contract_cats.csv"
+    path.write_text(HEADER + "\n".join(CONTRACT_ROWS) + "\n", encoding="utf-8")
+    return load_categories(path)
+
+
+def test_synonym_starting_a_compound_does_not_outweigh_the_title(contract_cats):
+    # "Kündigungsfrist" is a notice period, not a Kündigung: in German compounds the last part names the thing.
+    result = run("befristeter Arbeitsvertrag Kündigungsfrist vier Wochen", contract_cats)
+
+    assert result.category_id == "VTR01"
+
+
+def test_fuzzy_match_does_not_confuse_a_word_with_its_negation(tmp_path):
+    # "befristet" and "unbefristet" are 90% alike by edit ratio, but mean the opposite.
+    path = tmp_path / "cats.csv"
+    path.write_text(
+        HEADER
+        + "VTR01,Befristeter Arbeitsvertrag,x,befristeter Arbeitsvertrag,,unbefristet,Arbeitsvertrag\n"
+        + "VTR02,Unbefristeter Arbeitsvertrag,x,unbefristeter Arbeitsvertrag,,,Arbeitsvertrag\n",
+        encoding="utf-8",
+    )
+
+    result = run("befristeter Arbeitsvertrag. Das Arbeitsverhältnis ist befristet.", load_categories(path))
+
+    assert candidate(result, "VTR01").matched_negatives == []
+    assert candidate(result, "VTR02").matched_synonyms == []

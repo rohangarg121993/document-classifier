@@ -55,8 +55,11 @@ class PageMatcher:
     def _fuzzy(self, keyword: str) -> bool:
         n_words = keyword.count(" ") + 1
         candidates = self._windows_of(n_words)
-        hit = process.extractOne(keyword, candidates, scorer=fuzz.ratio, score_cutoff=self._rules.fuzzy_threshold)
-        return hit is not None
+        hits = process.extract(
+            keyword, candidates, scorer=fuzz.ratio, score_cutoff=self._rules.fuzzy_threshold, limit=None
+        )
+        # The same word with letters put in front is a different word, not an OCR error: "befristet" vs "unbefristet".
+        return any(not (window.endswith(keyword) or keyword.endswith(window)) for window, _, _ in hits)
 
     def _windows_of(self, n_words: int) -> list[str]:
         if n_words not in self._windows:

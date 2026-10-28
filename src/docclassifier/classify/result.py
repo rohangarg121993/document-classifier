@@ -28,6 +28,7 @@ class Candidate:
     synonym_score: float = 0.0  # synonym evidence, 0-1
     phrase_score: float = 0.0  # phrase evidence, 0-1
     similarity: float = 0.0  # raw cosine similarity to the category profile
+    example_similarity: float = 0.0  # raw cosine similarity to the closest validated page of this category
     negative_penalty: float = 0.0
     matched_synonyms: list[KeywordMatch] = field(default_factory=list)
     matched_phrases: list[KeywordMatch] = field(default_factory=list)
@@ -36,7 +37,7 @@ class Candidate:
 
 @dataclass(frozen=True)
 class ClassificationResult:
-    status: Literal["classified", "parent_only", "fallback", "unclassified"]
+    status: Literal["classified", "parent_only", "fallback", "unclassified", "validated"]
     category_id: str
     category_name: str | None
     parent_category: str | None

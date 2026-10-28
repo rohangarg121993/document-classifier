@@ -35,6 +35,9 @@ python docclassify.py classify inbox/ --categories config/categories.csv --revie
 # After correcting the wrong rows in review.csv: accuracy, confusion, misclassified pages
 python docclassify.py evaluate review.csv --categories config/categories.csv
 
+# Remember the validated labels: later runs return them for these pages and classify similar pages alike
+python docclassify.py learn review.csv
+
 # Can every category recognise a synthetic page built from its own definition? (no labelled data needed)
 python docclassify.py selfcheck --categories config/categories.csv
 ```
@@ -46,6 +49,9 @@ Each result has `status`:
 - `parent_only`: the parent category is clear but the child isn't.
 - `fallback`: no category was found and `fallback_category_id` is set, so that category is used.
 - `unclassified`: no category was found; `reason` is `low_confidence` or `insufficient_text`.
+- `validated`: a person already labelled this page (same text) and `learn` stored it; the label is returned as is.
+
+`learn` keeps validated pages in `.cache/feedback` (page text: stays local, ADR-0001); delete the folder to forget them, or set `[feedback] enabled = false`. Run `evaluate` on pages that were not learned, otherwise it reports their stored labels (ADR-0004).
 
 Each result also has a confidence, the top-3 candidates with a per-region score breakdown, the extraction method, and `ocr_quality` / `handwriting_suspected` flags.
 

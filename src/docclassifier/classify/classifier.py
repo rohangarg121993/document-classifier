@@ -3,12 +3,14 @@
 Evidence model (ADR-0003). Each signal removes part of the remaining doubt, so one strong signal plus
 supporting ones gives a high strength, while a page without evidence stays near zero:
 
-    strength = 1 - (1 - r_syn·synonyms)(1 - r_phr·phrases)(1 - r_sim·similarity) - penalty·negatives
+    strength = 1 - (1 - r_syn·synonyms)(1 - r_phr·phrases)(1 - r_sim·similarity)(1 - r_ex·examples)
+               - penalty·negatives
 
 - synonyms: document-type names; one hit is full evidence, weighted by where it appears (a title, i.e. top of
   the page or large print anywhere, counts fully);
 - phrases: content clues; distinct hits weighted by position, specificity and fuzziness, capped;
-- similarity: TF-IDF cosine to the category profile, relative to what a real matching page reaches.
+- similarity: TF-IDF cosine to the category profile, relative to what a real matching page reaches;
+- examples: TF-IDF cosine to the closest page a person validated for the category (ADR-0004).
 """
 
 from __future__ import annotations
@@ -37,12 +39,16 @@ def classify(page: PageText, categories: CategorySet, settings: Settings) -> Cla
     page_matcher = PageMatcher(texts["full"], rules)
     position_matchers = {p: PageMatcher(texts[p], rules) for p in POSITIONS}
     similarities = categories.similarities([texts["full"]])[0]
+    example_similarities = categories.example_similarities(texts["full"])
     sizes = _word_sizes(page)
     title_level = _title_level(categories, page_matcher, position_matchers, cfg)
 
     ranked = [
-        _score(category, categories, page_matcher, position_matchers, sizes, similarity, title_level, cfg)
-        for category, similarity in zip(categories, similarities)
+        _score(
+            category, categories, page_matcher, position_matchers, sizes, similarity, example_similarity,
+            title_level, cfg,
+        )
+        for category, similarity, example_similarity in zip(categories, similarities, example_similarities)
     ]
     # Strongest first; sort is stable, so ties keep CSV order.
     ranked.sort(key=lambda c: -c.score)
@@ -67,6 +73,7 @@ def _score(
     position_matchers: dict[str, PageMatcher],
     sizes: list[tuple[str, float]],
     similarity: float,
+    example_similarity: float,
     title_level: float,
     cfg: ClassifierSettings,
 ) -> Candidate:
@@ -79,7 +86,10 @@ def _score(
 
     # Synonyms are not discounted for being shared with a sibling: a shared title is still strong evidence
     # against unrelated categories, and the tie between siblings is resolved by the decision layer.
-    synonyms = _matches(category.synonyms, None, synonym_positions, page_matcher, position_matchers, sizes, cfg)
+    synonyms = _matches(
+        category.synonyms, None, synonym_positions, page_matcher, position_matchers, sizes, cfg,
+        prefix_weight=cfg.synonym_prefix_weight,
+    )
     phrases = _matches(
         category.positive_phrases, categories, phrase_positions, page_matcher, position_matchers, sizes, cfg
     )
@@ -88,10 +98,13 @@ def _score(
     synonym_evidence = min(1.0, sum(m.weight for m in synonyms) / cfg.synonym_cap)
     phrase_evidence = min(1.0, sum(m.weight for m in phrases) / cfg.phrase_cap)
     similarity_evidence = min(1.0, max(0.0, similarity) / cfg.similarity_full)
+    floor = cfg.example_similarity_floor
+    example_evidence = min(1.0, max(0.0, (example_similarity - floor) / (cfg.example_similarity_full - floor)))
     doubt = (
         (1 - cfg.synonym_reliability * synonym_evidence)
         * (1 - cfg.phrase_reliability * phrase_evidence)
         * (1 - cfg.similarity_reliability * similarity_evidence)
+        * (1 - cfg.example_reliability * example_evidence)
     )
     penalty = cfg.negative_penalty * len(negatives)
     return Candidate(
@@ -102,6 +115,7 @@ def _score(
         synonym_score=round(synonym_evidence, 4),
         phrase_score=round(phrase_evidence, 4),
         similarity=round(similarity, 4),
+        example_similarity=round(example_similarity, 4),
         negative_penalty=round(penalty, 4),
         matched_synonyms=synonyms,
         matched_phrases=phrases,
@@ -155,11 +169,13 @@ def _matches(
     position_matchers: dict[str, PageMatcher],
     sizes: list[tuple[str, float]],
     cfg: ClassifierSettings,
+    prefix_weight: float = 1.0,
 ) -> list[KeywordMatch]:
     """Distinct keyword hits on the page.
 
     `categories` given: weight by specificity (positive phrases). `positions` given: weight by the best
     position the keyword appears in; a keyword only found across a region boundary counts as "middle".
+    `prefix_weight` scales hits found only at the start of a longer word.
     """
     found: dict[str, KeywordMatch] = {}
     for keyword in keywords:
@@ -172,6 +188,8 @@ def _matches(
         weight = categories.specificity(keyword) if categories is not None else 1.0
         if kind == "fuzzy":
             weight *= cfg.fuzzy_weight
+        elif kind == "prefix":
+            weight *= prefix_weight
         position = "page"
         if positions is not None:
             seen = [p for p in POSITIONS if position_matchers[p].match(key)]

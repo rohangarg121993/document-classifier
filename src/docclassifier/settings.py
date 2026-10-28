@@ -51,6 +51,10 @@ class ClassifierSettings:
     min_fuzzy_length: int
     fuzzy_threshold: float
     fuzzy_weight: float
+    synonym_prefix_weight: float
+    example_reliability: float
+    example_similarity_floor: float
+    example_similarity_full: float
 
 
 @dataclass(frozen=True)
@@ -68,11 +72,18 @@ class CacheSettings:
 
 
 @dataclass(frozen=True)
+class FeedbackSettings:
+    enabled: bool
+    dir: str
+
+
+@dataclass(frozen=True)
 class Settings:
     ocr: OcrSettings
     cache: CacheSettings
     classifier: ClassifierSettings
     decision: DecisionSettings
+    feedback: FeedbackSettings
 
 
 _SECTIONS = {
@@ -80,6 +91,7 @@ _SECTIONS = {
     "cache": CacheSettings,
     "classifier": ClassifierSettings,
     "decision": DecisionSettings,
+    "feedback": FeedbackSettings,
 }
 
 

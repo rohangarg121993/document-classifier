@@ -74,6 +74,16 @@ min_fuzzy_length = 6
 fuzzy_threshold = 90
 # A fuzzy hit counts this much of an exact hit.
 fuzzy_weight = 0.7
+# A synonym found only at the start of a longer word counts this much: in German compounds the last part names
+# the thing, so "Kündigungsfrist" is a notice period, not a Kündigung.
+synonym_prefix_weight = 0.5
+
+# Validated pages (ADR-0004): a page like one a person labelled with `learn` counts as evidence for that label.
+# Cosine to the closest validated page, below the floor it is no evidence, from "full" it is full evidence.
+# Measured on synthetic pages: same form, other person ~0.9; another form ~0.65; unrelated pages ~0.15.
+example_reliability = 0.9
+example_similarity_floor = 0.6
+example_similarity_full = 0.85
 
 [decision]
 # confidence = winner strength × (1 - doubt of winner / doubt of runner-up), doubt = 1 - strength.
@@ -86,3 +96,9 @@ min_text_chars = 20
 fallback_category_id = ""
 # Confidence ceiling for pages suspected to be handwritten; below the threshold, so they go to review.
 handwriting_confidence_cap = 0.45
+
+[feedback]
+# Use pages a person validated with `learn` (ADR-0004). The store is derived from page text (personal data):
+# keep the directory local and git-ignored (ADR-0001).
+enabled = true
+dir = ".cache/feedback"
