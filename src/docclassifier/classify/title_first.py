@@ -7,7 +7,7 @@ elsewhere on the page ("…müssen Sie mit einer Kündigung rechnen") are mentio
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from statistics import median
 
@@ -15,6 +15,7 @@ import snowballstemmer
 
 from docclassifier.classify import context
 from docclassifier.classify.categories import CategorySet
+from docclassifier.classify.decision import with_fallback
 from docclassifier.classify.normalize import normalize
 from docclassifier.classify.result import UNCLASSIFIED, Candidate, ClassificationResult, KeywordMatch
 from docclassifier.ocr.models import PageText, Word
@@ -41,8 +42,14 @@ class Line:
 
 
 def classify(page: PageText, categories: CategorySet, settings: Settings) -> ClassificationResult:
+    return with_fallback(_classify(page, categories, settings), categories, settings.decision)
+
+
+def _classify(page: PageText, categories: CategorySet, settings: Settings) -> ClassificationResult:
     # The first title candidate that names a category is the title; a letterhead in large print names none.
     titles = title_candidates(page, settings.classifier.heading_ratio)
+    if len(normalize(page.text).replace(" ", "")) < settings.decision.min_text_chars:
+        return _unclassified("insufficient_text", [], titles[0] if titles else None)
     title, matches = (titles[0] if titles else None), {}
     for candidate in titles:
         if found := _title_matches(candidate, categories, settings.classifier.min_prefix_length):
@@ -63,17 +70,15 @@ def classify(page: PageText, categories: CategorySet, settings: Settings) -> Cla
         # The title names a kind of document; the body decides which one in that family: "Kündigung" by the
         # employee or the employer, "Arbeitsvertrag" fixed-term or not.
         return _by_content(page, categories, settings, title, among=family)
+    # Every category is ranked: the ones the title names first, the rest unscored in CSV order.
+    ranked = candidates + [
+        Candidate(category_id=c.category_id, category_name=c.name, parent_category=c.parent, score=0.0)
+        for c in categories
+        if c.category_id not in matches
+    ]
     if len(candidates) != 1:
-        return ClassificationResult(
-            status="unclassified", category_id=UNCLASSIFIED, category_name=None, parent_category=None,
-            confidence=0.0, candidates=candidates, reason="low_confidence", candidates_all=candidates, title=title,
-        )
-    best = candidates[0]
-    return ClassificationResult(
-        status="classified", category_id=best.category_id, category_name=best.category_name,
-        parent_category=best.parent_category, confidence=settings.classifier.title_match_confidence,
-        candidates=candidates, candidates_all=candidates, title=title,
-    )
+        return _unclassified("low_confidence", ranked, title, settings.classifier.top_n)
+    return _classified(ranked, settings.classifier.title_match_confidence, page, settings, title)
 
 
 def _by_content(
@@ -108,18 +113,43 @@ def _by_content(
             matched_negatives=[KeywordMatch(p, "stem", 1.0) for p in negatives],
         ))
     ranked.sort(key=lambda c: -c.score)
-    top = ranked[: settings.classifier.top_n]
     margin = ranked[0].score - ranked[1].score if len(ranked) > 1 else ranked[0].score
     if margin < cfg.min_margin:
-        return ClassificationResult(
-            status="unclassified", category_id=UNCLASSIFIED, category_name=None, parent_category=None,
-            confidence=0.0, candidates=top, reason="low_confidence", candidates_all=ranked, title=title,
-        )
+        result = _unclassified("low_confidence", ranked, title, settings.classifier.top_n)
+        contenders = {c.parent_category for c in ranked if ranked[0].score - c.score < cfg.min_margin}
+        if len(contenders) == 1:
+            # Too close to call between siblings, but clearly that kind of document.
+            return replace(
+                result, status="parent_only", parent_category=ranked[0].parent_category,
+                parent_confidence=cfg.confidence,
+            )
+        return result
+    return _classified(ranked, cfg.confidence, page, settings, title)
+
+
+def _classified(
+    ranked: list[Candidate], confidence: float, page: PageText, settings: Settings, title: str | None
+) -> ClassificationResult:
+    """The leader of `ranked` wins, unless the confidence falls below the threshold: suspected handwriting caps
+    it, because OCR may have misread the very words that decided."""
+    cfg = settings.decision
+    if page.handwriting_suspected:
+        confidence = min(confidence, cfg.handwriting_confidence_cap)
+    if confidence < cfg.threshold:
+        return replace(_unclassified("low_confidence", ranked, title, settings.classifier.top_n), confidence=confidence)
     best = ranked[0]
     return ClassificationResult(
         status="classified", category_id=best.category_id, category_name=best.category_name,
-        parent_category=best.parent_category, confidence=cfg.confidence, candidates=top,
+        parent_category=best.parent_category, confidence=confidence, candidates=ranked[: settings.classifier.top_n],
         candidates_all=ranked, title=title,
+    )
+
+
+def _unclassified(reason: str, ranked: list[Candidate], title: str | None, top_n: int = 0) -> ClassificationResult:
+    return ClassificationResult(
+        status="unclassified", category_id=UNCLASSIFIED, category_name=None, parent_category=None,
+        confidence=0.0, candidates=ranked[:top_n] if top_n else ranked, reason=reason, candidates_all=ranked,
+        title=title,
     )
 
 

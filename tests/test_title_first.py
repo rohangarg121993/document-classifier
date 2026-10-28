@@ -202,3 +202,52 @@ def test_title_naming_the_general_type_lets_its_specific_sibling_compete(cats):
     result = run(p, cats)
 
     assert (result.status, result.category_id) == ("classified", "VTR01")
+
+
+def test_page_with_too_little_text_is_not_classified(cats):
+    # A stray word or two of OCR noise is no document, even if it happens to read like a title.
+    result = run(page([(80, "Abmahnung", 18, 230)]), cats)
+
+    assert (result.status, result.reason) == ("unclassified", "insufficient_text")
+
+
+def test_every_category_is_ranked_with_the_title_match_first(cats):
+    p = letter("Betreff: Abmahnung", ["Sehr geehrter Herr Muster,", "Sie haben wiederholt gegen Ihre Pflichten verstoßen."])
+
+    ranked = [c.category_id for c in run(p, cats).candidates_all]
+
+    assert ranked[0] == "DIS01"
+    assert sorted(ranked) == sorted(row.split(",")[0] for row in ROWS)
+
+
+def test_suspected_handwriting_sends_a_title_match_to_review(cats):
+    # OCR of handwriting is unreliable: the title may be misread, so a person checks it.
+    p = letter("Betreff: Abmahnung", ["Sehr geehrter Herr Muster,", "Sie haben wiederholt gegen Ihre Pflichten verstoßen."])
+
+    result = run(replace(p, handwriting_suspected=True), cats)
+
+    assert result.status != "classified"
+    assert result.confidence <= load_settings().decision.handwriting_confidence_cap
+    assert result.candidates[0].category_id == "DIS01"
+
+
+def test_page_without_a_category_goes_to_the_fallback_category_when_one_is_set(cats):
+    settings = load_settings()
+    settings = replace(
+        settings, classifier=replace(settings.classifier, engine="title_first"),
+        decision=replace(settings.decision, fallback_category_id="ZUS07"),
+    )
+
+    result = classify(page([(80, "Seite 2", 10)]), cats, settings)
+
+    assert (result.status, result.category_id) == ("fallback", "ZUS07")
+
+
+@pytest.mark.encoder
+def test_siblings_too_close_to_call_still_give_their_parent(cats):
+    # "Kündigung", and the body doesn't say who gives notice: certainly an Austritt, unsure which one.
+    p = page([(80, "Kündigung", 18, 230), (130, "Ihr Arbeitsverhältnis endet mit Ablauf des 30.06.2026.", 10)])
+
+    result = run(p, cats)
+
+    assert (result.status, result.category_id, result.parent_category) == ("parent_only", "UNCLASSIFIED", "Austritt")

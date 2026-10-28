@@ -23,7 +23,11 @@ def decide(
     When `fallback_category_id` is set, any result without a category is mapped to that category.
     """
     cap = cfg.handwriting_confidence_cap if handwriting_suspected else 1.0
-    result = _decide(ranked, text_chars, top_n, cfg, cap)
+    return with_fallback(_decide(ranked, text_chars, top_n, cfg, cap), categories, cfg)
+
+
+def with_fallback(result: ClassificationResult, categories: CategorySet, cfg: DecisionSettings) -> ClassificationResult:
+    """`result`, or, when it names no category and `fallback_category_id` is set, that category instead."""
     if result.category_id != UNCLASSIFIED or not cfg.fallback_category_id:
         return result
     fallback = next((c for c in categories if c.category_id == cfg.fallback_category_id), None)
