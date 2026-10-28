@@ -94,5 +94,5 @@ def test_classify_does_not_print_taxonomy_warnings(make_pdf):
 def test_selfcheck_reports_shared_synonyms():
     proc = run_cli("selfcheck", "--categories", REAL_CATEGORIES)
 
-    assert "28 synonym(s) are shared" in proc.stdout
-    assert "endzeugnis" in proc.stdout
+    assert "1 synonym(s) are shared" in proc.stdout
+    assert "kuendigung" in proc.stdout

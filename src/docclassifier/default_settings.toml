@@ -32,53 +32,32 @@ enabled = true
 dir = ".cache/ocr"
 
 [classifier]
+# Title-first classification (ADR-0005): find the document's title, match it against the synonyms, and let the
+# content decide only when the title doesn't.
 # How many candidate categories to report.
 top_n = 3
-
-# Evidence model (ADR-0003). Each signal removes part of the remaining doubt:
-#   strength = 1 - (1 - synonym_reliability * synonym evidence)
-#                * (1 - phrase_reliability * phrase evidence)
-#                * (1 - similarity_reliability * similarity evidence)
-#              - negative_penalty * negative hits
-synonym_reliability = 0.95
-phrase_reliability = 0.60
-similarity_reliability = 0.50
-
-# Distinct hits (after position, specificity and fuzzy weighting) that count as full evidence.
-# One synonym (a document-type name) is enough; content phrases need several.
-synonym_cap = 1
-phrase_cap = 3
-# Cosine similarity to the category profile that counts as full similarity evidence.
-similarity_full = 0.5
-# Subtracted from a category's strength per distinct negative-phrase hit.
-negative_penalty = 0.15
-
-# Where on the page a hit appears. A synonym is a document-type name: it counts fully as a title, i.e. in the
-# top third or in large print anywhere ("heading"), and less in running text further down.
-# Per-category overrides for top/middle/bottom come from optional weight_top/middle/bottom CSV columns.
-# Words at least this many times taller than the page's median word count as large print.
+# Words at least this many times taller than the page's median word count as large print (a title candidate).
 heading_ratio = 1.4
-synonym_position_heading = 1.0
-synonym_position_top = 1.0
-synonym_position_middle = 0.5
-synonym_position_bottom = 0.4
-phrase_position_heading = 1.0
-phrase_position_top = 1.0
-phrase_position_middle = 0.8
-phrase_position_bottom = 0.7
+# Synonyms at least this long (normalised) also name a title as the last part of a compound:
+# "Verhaltensabmahnung" is an Abmahnung.
+min_compound_length = 6
+# Confidence when the title names exactly one category (or names one and its siblings fit no better).
+title_match_confidence = 0.9
+# Positive phrases found that count as full phrase evidence in the content match.
+phrase_cap = 3
 
-# Keywords at least this long (normalised) also match the start of longer words (German compounds).
-min_prefix_length = 6
-# Keywords at least this long also match with OCR errors, at this rapidfuzz ratio or higher.
-min_fuzzy_length = 6
-fuzzy_threshold = 90
-# A fuzzy hit counts this much of an exact hit.
-fuzzy_weight = 0.7
+# Validated pages (ADR-0004): a page that nearly repeats one a person labelled with `learn` gets that label.
+# Similarity (character n-grams) to the closest validated page from which it counts as a repeat. Measured on
+# synthetic pages: same form, other person ~0.9; another form ~0.65; unrelated pages ~0.15.
+example_similarity = 0.85
+example_confidence = 0.9
+# Share of that similarity measured on the top of the page (top third and large print); the whole page gives the
+# rest. Below this many words the top holds just a title, and the whole page decides alone.
+similarity_top_share = 0.6
+similarity_top_min_words = 5
 
 [decision]
-# confidence = winner strength × (1 - doubt of winner / doubt of runner-up), doubt = 1 - strength.
-# Below this confidence the page is UNCLASSIFIED (reason "low_confidence") or, if one parent category is
-# clear, "parent_only".
+# Below this confidence the page is UNCLASSIFIED (reason "low_confidence").
 threshold = 0.50
 # Pages with fewer non-space characters are UNCLASSIFIED (reason "insufficient_text").
 min_text_chars = 20
@@ -86,3 +65,29 @@ min_text_chars = 20
 fallback_category_id = ""
 # Confidence ceiling for pages suspected to be handwritten; below the threshold, so they go to review.
 handwriting_confidence_cap = 0.45
+
+[feedback]
+# Use pages a person validated with `learn` (ADR-0004). The store is derived from page text (personal data):
+# keep the directory local and git-ignored (ADR-0001).
+enabled = true
+dir = ".cache/feedback"
+
+[context]
+# When the title names no category, or several of one family, compare the page's meaning with each category's
+# name, description and positive phrases, using the offline sentence encoder shipped in models/ (ADR-0005).
+# A relative directory is relative to the repository. Without it (enabled = false) only titles decide.
+enabled = true
+model_dir = "models/multilingual-e5-small"
+# Classify by meaning only when the best category leads the runner-up by at least this cosine margin.
+# On 50 benchmark pages: margin >= 0.02 was right 11 of 13 times; below it, right and wrong are mixed.
+min_margin = 0.02
+# Confidence reported for a page classified by meaning alone (a title match reports title_match_confidence).
+confidence = 0.6
+# Added to a category's meaning score at full positive-phrase evidence (phrase_cap distinct phrases, matched by
+# word stems); subtracted per negative-phrase hit. Cosines of different categories lie within ~0.05 of each
+# other, so one phrase (0.1 / 3) already outweighs a typical difference in meaning.
+phrase_weight = 0.1
+# The same, when choosing between the categories the title named (e.g. Kündigung by employee or employer):
+# the title fixed the topic, so meaning hardly differs and the categories' own phrases must decide.
+sibling_phrase_weight = 0.3
+negative_weight = 0.05

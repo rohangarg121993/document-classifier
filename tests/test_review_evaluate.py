@@ -60,7 +60,7 @@ def correct(review, page_file, page, label):
 def test_evaluate_corrected_review_file(inbox, tmp_path):
     review = tmp_path / "review.csv"
     run_cli("classify", inbox, "--categories", REAL_CATEGORIES, "--review-out", review)
-    rows = correct(review, "a.pdf", 2, "SON02")  # the reviewer says page 2 is "sonstiges"
+    rows = correct(review, "a.pdf", 2, "SON05")  # the reviewer says page 2 is an address change
     predicted_p2 = next(r["predicted_id"] for r in rows if r["file"].endswith("a.pdf") and r["page"] == "2")
 
     proc = run_cli("evaluate", review, "--categories", REAL_CATEGORIES, "--json")
@@ -70,9 +70,9 @@ def test_evaluate_corrected_review_file(inbox, tmp_path):
     assert report["summary"] == {"pages": 3, "correct": 2, "accuracy": pytest.approx(2 / 3, abs=1e-3)}
     [miss] = report["misclassified"]
     assert miss["file"].endswith("a.pdf") and miss["page"] == 2
-    assert (miss["expected"], miss["predicted"]) == ("SON02", predicted_p2)
+    assert (miss["expected"], miss["predicted"]) == ("SON05", predicted_p2)
     assert len(miss["top3"]) == 3
-    assert report["confusion"]["SON02"] == {predicted_p2: 1}
+    assert report["confusion"]["SON05"] == {predicted_p2: 1}
     assert report["confusion"]["DIS01"] == {"DIS01": 1}
 
 

@@ -1,4 +1,4 @@
-"""Rule-based document page classifier: offline OCR plus keyword scoring against a category CSV."""
+"""Rule-based document page classifier: offline OCR, then title-first matching against a category CSV."""
 
 from docclassifier.classify import ClassificationResult, classify, load_categories
 from docclassifier.ocr import PageText, extract_page

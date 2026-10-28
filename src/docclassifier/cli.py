@@ -4,6 +4,7 @@
     docclassify classify FILE_OR_FOLDER --categories CSV    every page → JSON Lines
     docclassify selfcheck --categories CSV                  can each category recognise its own synthetic page?
     docclassify evaluate LABELS.csv --categories CSV        accuracy against labelled (or reviewed) pages
+    docclassify learn LABELS.csv                            remember validated pages for later runs
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+from docclassifier import feedback
 from docclassifier.batch import classify_all, page_record
 from docclassifier.classify import CategoryFileError, load_categories
 from docclassifier.review import ReviewWriter, evaluation_report, format_evaluation, read_labels
@@ -40,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
     check.add_argument("--min-confidence", type=float, default=0.5, help="confidence a category needs on its own page")
     check.add_argument("--max-failures", type=int, default=0, help="exit non-zero only above this many failures")
     check.add_argument("--json", action="store_true", help="print the full report as JSON")
+    lrn = sub.add_parser("learn", help="store the validated labels of a corrected review file for later runs")
+    lrn.add_argument("labels", metavar="LABELS_CSV", help="columns file, page, expected_category_id (a review file works)")
+    lrn.add_argument("--settings", help="TOML file overriding default settings")
     ev = sub.add_parser("evaluate", help="measure accuracy against a label file or corrected review file")
     ev.add_argument("labels", metavar="LABELS_CSV", help="columns file, page, expected_category_id (a review file works)")
     ev.add_argument("--categories", required=True, help="category CSV file")
@@ -52,12 +57,14 @@ def main(argv: list[str] | None = None) -> int:
         return _selfcheck(args, settings)
     if args.command == "evaluate":
         return _evaluate(args, settings)
+    if args.command == "learn":
+        return _learn(args, settings)
     if args.no_cache:
         settings = replace(settings, cache=replace(settings.cache, enabled=False))
     if args.force_ocr:
         settings = replace(settings, ocr=replace(settings.ocr, force_ocr=True))
     try:
-        categories = load_categories(args.categories)
+        categories = feedback.with_examples(load_categories(args.categories), settings)
     except CategoryFileError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -106,9 +113,22 @@ def _selfcheck(args, settings) -> int:
     return 1 if report["summary"]["failed"] > args.max_failures else 0
 
 
+def _learn(args, settings) -> int:
+    try:
+        labels = read_labels(args.labels)
+    except (ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    learned, problems = feedback.learn(labels, settings)
+    for problem in problems:
+        print(f"warning: {problem}", file=sys.stderr)
+    print(f"learned {learned} page(s) into {settings.feedback.dir}")
+    return 1 if problems else 0
+
+
 def _evaluate(args, settings) -> int:
     try:
-        categories = load_categories(args.categories)
+        categories = feedback.with_examples(load_categories(args.categories), settings)
         labels = read_labels(args.labels)
     except (CategoryFileError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)

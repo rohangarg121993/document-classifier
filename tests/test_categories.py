@@ -1,4 +1,3 @@
-import math
 
 import pytest
 
@@ -85,37 +84,8 @@ def test_synonym_shared_across_categories_warns(tmp_path):
     assert any("endzeugnis" in w and "ZEU01" in w and "ZEU05" in w for w in categories.warnings)
 
 
-def test_specificity_weight_shrinks_with_sharing(tmp_path):
-    path = write(tmp_path, HEADER + "\n".join(ROWS) + "\n")
-
-    categories = load_categories(path)
-
-    assert categories.specificity("Abmahnung") == 1.0  # one category
-    assert categories.specificity("checkliste") == pytest.approx(1 / (1 + math.log(2)))
-    assert categories.specificity("not a keyword") == 1.0
-
-
-def test_optional_region_weight_columns(tmp_path):
-    header = HEADER.rstrip("\n") + ",weight_top,weight_bottom\n"
-    rows = [ROWS[0] + ",0.6,0.1", ROWS[1] + ",,"]
-    path = write(tmp_path, header + "\n".join(rows) + "\n")
-
-    categories = load_categories(path)
-
-    assert categories[0].region_weights == {"top": 0.6, "bottom": 0.1}
-    assert categories[1].region_weights == {}  # empty cells: global weights apply
-
-
-def test_invalid_region_weight_is_fatal(tmp_path):
-    header = HEADER.rstrip("\n") + ",weight_top\n"
-    path = write(tmp_path, header + ROWS[0] + ",high\n")
-
-    with pytest.raises(CategoryFileError, match="weight_top.*high"):
-        load_categories(path)
-
-
 def test_real_taxonomy_loads_without_errors():
     categories = load_categories(REAL_CATEGORIES)
 
-    assert len(categories) == 144
-    assert categories.warnings  # known shared synonyms such as "Endzeugnis"
+    assert len(categories) == 134
+    assert categories.warnings  # "Kündigung" is shared on purpose: by the employee (AUS04) or the employer (AUS05)

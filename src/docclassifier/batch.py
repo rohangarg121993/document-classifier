@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
+from docclassifier import feedback
 from docclassifier.classify import CategorySet, classify, load_categories
 from docclassifier.ocr import ExtractionError, extract_page, page_count
 from docclassifier.ocr.extract import SUPPORTED_SUFFIXES
@@ -31,7 +32,8 @@ def page_record(
     except ExtractionError as exc:
         return error_record(file, page_number, str(exc))
     extracted = time.perf_counter()
-    result = classify(page, categories, settings)
+    # A page a person already validated keeps their label (ADR-0004).
+    result = feedback.validated(page, categories, settings) or classify(page, categories, settings)
     classified = time.perf_counter()
 
     record = {
@@ -65,7 +67,7 @@ def classify_all(
             tasks.append((file, None, str(exc)))
 
     if workers <= 1:
-        categories = load_categories(categories_path)
+        categories = feedback.with_examples(load_categories(categories_path), settings)
         for task in tasks:
             yield _run(task, categories, settings, include_text)
         return
@@ -88,7 +90,7 @@ def _run(task, categories: CategorySet, settings: Settings, include_text: bool) 
 
 
 def _init_worker(categories_path: str, settings: Settings) -> None:
-    _worker_state["categories"] = load_categories(categories_path)
+    _worker_state["categories"] = feedback.with_examples(load_categories(categories_path), settings)
     _worker_state["settings"] = settings
 
 

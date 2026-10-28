@@ -9,10 +9,9 @@ from __future__ import annotations
 import csv
 import io
 import logging
-import math
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 
@@ -31,7 +30,6 @@ REQUIRED_COLUMNS = (
     "negative_phrases",
     "parent_category",
 )
-REGIONS = ("top", "middle", "bottom")
 
 
 class CategoryFileError(ValueError):
@@ -47,44 +45,56 @@ class Category:
     positive_phrases: list[str]
     negative_phrases: list[str]
     parent: str
-    # Per-category position factors from optional weight_top/middle/bottom columns; missing ones use settings.
-    region_weights: dict[str, float] = field(default_factory=dict)
 
 
 class CategorySet(Sequence[Category]):
     """The loaded categories in CSV order, plus load warnings and keyword specificity weights."""
 
-    def __init__(self, categories: list[Category], warnings: list[str]):
+    def __init__(
+        self, categories: list[Category], warnings: list[str], examples: tuple[tuple[str, str, str], ...] = ()
+    ):
         self._categories = categories
         self.warnings = warnings
-        listing = defaultdict(set)
-        for c in categories:
-            for keyword in c.synonyms + c.positive_phrases:
-                listing[normalize(keyword)].add(c.category_id)
-        self._listing_counts = {kw: len(ids) for kw, ids in listing.items()}
+        # (category_id, normalised page text, normalised top of the page) for pages a person validated (ADR-0004).
+        self._examples = tuple(e for e in examples if any(c.category_id == e[0] for c in categories))
 
-    def specificity(self, keyword: str) -> float:
-        """1 / (1 + ln n), where n is how many categories list the keyword as synonym or positive phrase."""
-        n = self._listing_counts.get(normalize(keyword), 1)
-        return 1 / (1 + math.log(n))
+    def with_examples(self, examples: list[tuple[str, ...]]) -> CategorySet:
+        """The same categories plus validated example pages, as (category_id, page text[, top of the page])."""
+        normalized = tuple((e[0], normalize(e[1]), normalize(e[2]) if len(e) > 2 else "") for e in examples)
+        return CategorySet(self._categories, self.warnings, normalized)
 
-    def similarities(self, texts: list[str]) -> list[list[float]]:
-        """For each text, the cosine similarity to each category profile, in CSV order.
-
-        TF-IDF on character n-grams (3-5, within word boundaries), fitted on the category profiles only:
-        name, description, synonyms and positive phrases. No document data, no training.
-        """
-        vectorizer, profiles = self._tfidf
-        # Rows are L2-normalised by TfidfVectorizer, so the dot product is the cosine.
-        return (vectorizer.transform([normalize(t) for t in texts]) @ profiles.T).toarray().tolist()
+    def example_similarities(self, text: str, top_text: str = "") -> tuple[list[float], list[float]]:
+        """For each category in CSV order, the cosine similarity to its most similar validated page (0: none):
+        the whole page against whole examples, and the top of the page against their tops."""
+        full = [0.0] * len(self._categories)
+        top = [0.0] * len(self._categories)
+        if not self._examples:
+            return full, top
+        vectorizer, full_matrix, top_matrix = self._example_tfidf
+        page = vectorizer.transform([normalize(text), normalize(top_text)])
+        full_cosines = (full_matrix @ page[0].T).toarray()[:, 0]
+        top_cosines = (top_matrix @ page[1].T).toarray()[:, 0]
+        index = {c.category_id: i for i, c in enumerate(self._categories)}
+        for (category_id, _, _), f, t in zip(self._examples, full_cosines, top_cosines):
+            i = index[category_id]
+            full[i] = max(full[i], float(f))
+            top[i] = max(top[i], float(t))
+        return full, top
 
     @cached_property
-    def _tfidf(self):
-        documents = [
+    def _example_tfidf(self):
+        # Fitted on profiles and examples together, so letter sequences common to all German text weigh little.
+        texts = [text for _, text, _ in self._examples]
+        tops = [top for _, _, top in self._examples]
+        vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), sublinear_tf=True)
+        vectorizer.fit(self._profiles + texts)
+        return vectorizer, vectorizer.transform(texts), vectorizer.transform(tops)
+
+    @cached_property
+    def _profiles(self) -> list[str]:
+        return [
             normalize(" ".join([c.name, c.description, *c.synonyms, *c.positive_phrases])) for c in self._categories
         ]
-        vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), sublinear_tf=True)
-        return vectorizer, vectorizer.fit_transform(documents)
 
     def __getitem__(self, index):
         return self._categories[index]
@@ -150,20 +160,6 @@ def _parse_row(row: dict[str, str | None], row_number: int, errors: list[str]) -
     if conflicts:
         errors.append(f"{category_id} (row {row_number}): keyword(s) listed as both positive and negative: {', '.join(conflicts)}")
 
-    region_weights = {}
-    for region in REGIONS:
-        raw = (row.get(f"weight_{region}") or "").strip()
-        if not raw:
-            continue
-        try:
-            value = float(raw.replace(",", "."))
-        except ValueError:
-            value = -1.0
-        if value < 0:
-            errors.append(f"{category_id} (row {row_number}): weight_{region} must be a number >= 0, got {raw!r}")
-        else:
-            region_weights[region] = value
-
     return Category(
         category_id=category_id,
         name=(row["category_name"] or "").strip(),
@@ -172,7 +168,6 @@ def _parse_row(row: dict[str, str | None], row_number: int, errors: list[str]) -
         positive_phrases=_split(row["positive_phrases"]),
         negative_phrases=negatives,
         parent=(row["parent_category"] or "").strip(),
-        region_weights=region_weights,
     )
 
 

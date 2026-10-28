@@ -13,7 +13,7 @@ class KeywordMatch:
     """A keyword found on the page. Holds the CSV keyword, never the page text (ADR-0001)."""
 
     keyword: str
-    kind: Literal["exact", "prefix", "fuzzy"]
+    kind: Literal["exact", "prefix", "fuzzy", "stem"]
     weight: float  # position factor × specificity × (1 for exact/prefix, fuzzy_weight for fuzzy)
     position: Literal["heading", "top", "middle", "bottom", "page"] = "page"  # "page": negatives, position-free
     size: float | None = None  # print size relative to the page's median word; ≥ heading_ratio means large print
@@ -27,7 +27,8 @@ class Candidate:
     score: float  # evidence strength, 0-1
     synonym_score: float = 0.0  # synonym evidence, 0-1
     phrase_score: float = 0.0  # phrase evidence, 0-1
-    similarity: float = 0.0  # raw cosine similarity to the category profile
+    similarity: float = 0.0  # cosine similarity to the category profile, top of the page weighted more
+    example_similarity: float = 0.0  # raw cosine similarity to the closest validated page of this category
     negative_penalty: float = 0.0
     matched_synonyms: list[KeywordMatch] = field(default_factory=list)
     matched_phrases: list[KeywordMatch] = field(default_factory=list)
@@ -36,7 +37,7 @@ class Candidate:
 
 @dataclass(frozen=True)
 class ClassificationResult:
-    status: Literal["classified", "parent_only", "fallback", "unclassified"]
+    status: Literal["classified", "parent_only", "fallback", "unclassified", "validated"]
     category_id: str
     category_name: str | None
     parent_category: str | None
@@ -46,6 +47,7 @@ class ClassificationResult:
     parent_confidence: float | None = None
     # Every category, best first. For API users and tests; not part of the JSON output.
     candidates_all: list[Candidate] = field(default_factory=list, repr=False)
+    title: str | None = None  # title_first: the line that names the document, as printed
 
     def to_dict(self) -> dict:
         data = asdict(self)

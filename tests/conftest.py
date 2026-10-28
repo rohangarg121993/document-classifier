@@ -51,12 +51,16 @@ def _tesseract_available() -> bool:
 
 
 def pytest_collection_modifyitems(config, items):
-    if _tesseract_available():
-        return
-    skip = pytest.mark.skip(reason="Tesseract binary not installed")
-    for item in items:
-        if "tesseract" in item.keywords:
-            item.add_marker(skip)
+    missing = {
+        "tesseract": None if _tesseract_available() else "Tesseract binary not installed",
+        "encoder": None if any((REPO_ROOT / "models" / "multilingual-e5-small").glob("model_quantized.onnx.*"))
+        else "text encoder not in models/",
+    }
+    for marker, reason in missing.items():
+        if reason:
+            for item in items:
+                if marker in item.keywords:
+                    item.add_marker(pytest.mark.skip(reason=reason))
 
 
 def render_image(lines, dpi=200, rotate=0) -> Image.Image:
