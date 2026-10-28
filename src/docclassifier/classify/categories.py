@@ -54,10 +54,12 @@ class Category:
 class CategorySet(Sequence[Category]):
     """The loaded categories in CSV order, plus load warnings and keyword specificity weights."""
 
-    def __init__(self, categories: list[Category], warnings: list[str], examples: tuple[tuple[str, str], ...] = ()):
+    def __init__(
+        self, categories: list[Category], warnings: list[str], examples: tuple[tuple[str, str, str], ...] = ()
+    ):
         self._categories = categories
         self.warnings = warnings
-        # (category_id, normalised page text) for pages a person validated (ADR-0004).
+        # (category_id, normalised page text, normalised top of the page) for pages a person validated (ADR-0004).
         self._examples = tuple(e for e in examples if any(c.category_id == e[0] for c in categories))
         listing = defaultdict(set)
         for c in categories:
@@ -80,22 +82,28 @@ class CategorySet(Sequence[Category]):
         # Rows are L2-normalised by TfidfVectorizer, so the dot product is the cosine.
         return (vectorizer.transform([normalize(t) for t in texts]) @ profiles.T).toarray().tolist()
 
-    def with_examples(self, examples: list[tuple[str, str]]) -> CategorySet:
-        """The same categories plus validated example pages, as (category_id, page text)."""
-        return CategorySet(self._categories, self.warnings, tuple((cid, normalize(t)) for cid, t in examples))
+    def with_examples(self, examples: list[tuple[str, ...]]) -> CategorySet:
+        """The same categories plus validated example pages, as (category_id, page text[, top of the page])."""
+        normalized = tuple((e[0], normalize(e[1]), normalize(e[2]) if len(e) > 2 else "") for e in examples)
+        return CategorySet(self._categories, self.warnings, normalized)
 
-    def example_similarities(self, text: str) -> list[float]:
-        """For each category in CSV order, the cosine similarity to its most similar validated page (0: none)."""
-        best = [0.0] * len(self._categories)
+    def example_similarities(self, text: str, top_text: str = "") -> tuple[list[float], list[float]]:
+        """For each category in CSV order, the cosine similarity to its most similar validated page (0: none):
+        the whole page against whole examples, and the top of the page against their tops."""
+        full = [0.0] * len(self._categories)
+        top = [0.0] * len(self._categories)
         if not self._examples:
-            return best
-        vectorizer, matrix = self._example_tfidf
+            return full, top
+        vectorizer, full_matrix, top_matrix = self._example_tfidf
+        page = vectorizer.transform([normalize(text), normalize(top_text)])
+        full_cosines = (full_matrix @ page[0].T).toarray()[:, 0]
+        top_cosines = (top_matrix @ page[1].T).toarray()[:, 0]
         index = {c.category_id: i for i, c in enumerate(self._categories)}
-        cosines = (matrix @ vectorizer.transform([normalize(text)]).T).toarray()[:, 0]
-        for (category_id, _), cosine in zip(self._examples, cosines):
+        for (category_id, _, _), f, t in zip(self._examples, full_cosines, top_cosines):
             i = index[category_id]
-            best[i] = max(best[i], float(cosine))
-        return best
+            full[i] = max(full[i], float(f))
+            top[i] = max(top[i], float(t))
+        return full, top
 
     @cached_property
     def _tfidf(self):
@@ -105,10 +113,11 @@ class CategorySet(Sequence[Category]):
     @cached_property
     def _example_tfidf(self):
         # Fitted on profiles and examples together, so letter sequences common to all German text weigh little.
-        texts = [text for _, text in self._examples]
+        texts = [text for _, text, _ in self._examples]
+        tops = [top for _, _, top in self._examples]
         vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5), sublinear_tf=True)
         vectorizer.fit(self._profiles + texts)
-        return vectorizer, vectorizer.transform(texts)
+        return vectorizer, vectorizer.transform(texts), vectorizer.transform(tops)
 
     @cached_property
     def _profiles(self) -> list[str]:

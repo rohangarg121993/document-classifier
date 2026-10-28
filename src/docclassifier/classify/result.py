@@ -27,7 +27,7 @@ class Candidate:
     score: float  # evidence strength, 0-1
     synonym_score: float = 0.0  # synonym evidence, 0-1
     phrase_score: float = 0.0  # phrase evidence, 0-1
-    similarity: float = 0.0  # raw cosine similarity to the category profile
+    similarity: float = 0.0  # cosine similarity to the category profile, top of the page weighted more
     example_similarity: float = 0.0  # raw cosine similarity to the closest validated page of this category
     negative_penalty: float = 0.0
     matched_synonyms: list[KeywordMatch] = field(default_factory=list)

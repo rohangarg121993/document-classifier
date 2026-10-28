@@ -9,7 +9,8 @@ supporting ones gives a high strength, while a page without evidence stays near 
 - synonyms: document-type names; one hit is full evidence, weighted by where it appears (a title, i.e. top of
   the page or large print anywhere, counts fully);
 - phrases: content clues; distinct hits weighted by position, specificity and fuzziness, capped;
-- similarity: TF-IDF cosine to the category profile, relative to what a real matching page reaches;
+- similarity: TF-IDF cosine to the category profile, relative to what a real matching page reaches; the top of
+  the page (top third and large print) counts `similarity_top_share` once it holds more than a title;
 - examples: TF-IDF cosine to the closest page a person validated for the category (ADR-0004).
 """
 
@@ -38,8 +39,15 @@ def classify(page: PageText, categories: CategorySet, settings: Settings) -> Cla
     texts = {name: normalize(text) for name, text in split_regions(page, cfg.heading_ratio).items()}
     page_matcher = PageMatcher(texts["full"], rules)
     position_matchers = {p: PageMatcher(texts[p], rules) for p in POSITIONS}
-    similarities = categories.similarities([texts["full"]])[0]
-    example_similarities = categories.example_similarities(texts["full"])
+    # The top of the page (top third and large print) says most about what a document is, as for a human reader.
+    # A top holding only a title adds nothing the synonyms haven't counted, so then the whole page decides alone.
+    top_text = f'{texts["heading"]} {texts["top"]}'
+    full_similarities, top_similarities = categories.similarities([texts["full"], top_text])
+    share = cfg.similarity_top_share if len(top_text.split()) >= cfg.similarity_top_min_words else 0.0
+    similarities = [share * top + (1 - share) * full for full, top in zip(full_similarities, top_similarities)]
+    example_similarities = [
+        share * top + (1 - share) * full for full, top in zip(*categories.example_similarities(texts["full"], top_text))
+    ]
     sizes = _word_sizes(page)
     title_level = _title_level(categories, page_matcher, position_matchers, cfg)
 

@@ -37,6 +37,8 @@ class ClassifierSettings:
     synonym_cap: float
     phrase_cap: float
     similarity_full: float
+    similarity_top_share: float
+    similarity_top_min_words: int
     negative_penalty: float
     heading_ratio: float
     synonym_position_heading: float

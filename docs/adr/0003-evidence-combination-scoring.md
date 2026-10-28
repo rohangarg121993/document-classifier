@@ -20,7 +20,7 @@ The first scoring model averaged weighted signals per page region and blended sc
 - **A synonym found only at the start of a longer word counts half** (`synonym_prefix_weight`, added 2026-10-28): in German compounds the last part names the thing, so "Kündigungsfrist" is a notice period, not a Kündigung. Fuzzy matches never count a word with letters put in front ("befristet" vs "unbefristet").
 - **Phrases** keep the cap of 3, the specificity discount and fuzzy weighting, plus position factors 1.0 / 0.8 / 0.7.
 - **Page position is a per-hit factor**, not a split. Evidence is gathered on the whole page. Per-category `weight_top/middle/bottom` CSV columns override the factors.
-- **Similarity** counts as full evidence at cosine 0.5.
+- **Similarity** counts as full evidence at cosine 0.5. **The top of the page counts more** (added 2026-10-28): similarity is 0.6 × the top section's (top third plus large print) + 0.4 × the whole page's, so a long body about something else doesn't outweigh the header, as for a human reader. A top with fewer than 5 words is just a title, which synonyms already count; then the whole page decides alone, so the body can still tell apart siblings that share a title (`similarity_top_share`, `similarity_top_min_words`).
 - **Confidence** = `s1 · (1 − (1 − s1) / (1 − s2))`: winner strength times how much less doubt it leaves than the runner-up. Default threshold 0.50; the handwriting cap is 0.45.
 
 ## Consequences

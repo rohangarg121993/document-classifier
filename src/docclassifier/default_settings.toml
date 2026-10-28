@@ -50,6 +50,11 @@ synonym_cap = 1
 phrase_cap = 3
 # Cosine similarity to the category profile that counts as full similarity evidence.
 similarity_full = 0.5
+# Share of similarity measured on the top of the page (top third and large print); the whole page gives the rest.
+# The top names the document type, so a long body about something else doesn't outweigh it.
+similarity_top_share = 0.6
+# Below this many words the top holds just a title, which synonyms already count: the whole page decides alone.
+similarity_top_min_words = 5
 # Subtracted from a category's strength per distinct negative-phrase hit.
 negative_penalty = 0.15
 

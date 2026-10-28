@@ -16,6 +16,7 @@ from pathlib import Path
 
 from docclassifier.classify import CategorySet, ClassificationResult
 from docclassifier.classify.normalize import normalize
+from docclassifier.classify.regions import split_regions
 from docclassifier.ocr import ExtractionError, extract_page
 from docclassifier.ocr.models import PageText
 from docclassifier.settings import Settings
@@ -36,7 +37,10 @@ def learn(labels: Iterable[tuple[Path, int, str]], settings: Settings) -> tuple[
             continue
         entry = _entry(key, settings)
         entry.parent.mkdir(parents=True, exist_ok=True)
-        entry.write_text(json.dumps({"category_id": expected, "text": normalize(page.text)}), encoding="utf-8")
+        regions = split_regions(page, settings.classifier.heading_ratio)
+        top = normalize(f"{regions['heading']} {regions['top']}")
+        data = {"category_id": expected, "text": normalize(page.text), "top": top}
+        entry.write_text(json.dumps(data), encoding="utf-8")
         learned += 1
     return learned, problems
 
@@ -48,7 +52,7 @@ def with_examples(categories: CategorySet, settings: Settings) -> CategorySet:
     examples = []
     for entry in sorted(Path(settings.feedback.dir).glob("*/*.json")):
         data = json.loads(entry.read_text(encoding="utf-8"))
-        examples.append((data["category_id"], data["text"]))
+        examples.append((data["category_id"], data["text"], data.get("top", "")))
     return categories.with_examples(examples)
 
 

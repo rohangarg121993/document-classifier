@@ -137,3 +137,39 @@ def test_synonym_in_running_text_counts_less_when_another_type_is_the_title(cats
 
     assert score(result, "FIN01") == pytest.approx(0.95, abs=1e-3)
     assert score(result, "DIS01") == pytest.approx(0.95 * 0.4, abs=1e-3)
+
+
+def test_similarity_follows_the_top_of_the_page_over_a_longer_body(tmp_path):
+    # Similarity only: keywords that never appear on the page, so synonyms and phrases contribute nothing.
+    path = tmp_path / "cats.csv"
+    path.write_text(
+        HEADER
+        + "GES01,Krankmeldung,Ärztliche Bescheinigung über Arbeitsunfähigkeit mit Diagnose und voraussichtlicher Dauer,Xqzkrank,,,Gesundheit\n"
+        + "URL01,Urlaubsantrag,Antrag auf Erholungsurlaub mit Urlaubstagen und Resturlaub zur Genehmigung,Xqzurlaub,,,Urlaub\n",
+        encoding="utf-8",
+    )
+    lines = [(60, "Ärztliche Bescheinigung über Arbeitsunfähigkeit"), (90, "Diagnose voraussichtliche Dauer")]
+    lines += [(y, "Urlaubstage Resturlaub Erholungsurlaub zur Genehmigung beantragt") for y in range(330, 800, 30)]
+
+    result = classify(page(lines), load_categories(path), load_settings())
+
+    assert result.candidates[0].category_id == "GES01"
+
+
+def test_validated_page_similarity_follows_the_top_of_the_page(tmp_path):
+    # Learned examples only (ADR-0004): category keywords never appear and profile similarity is switched off.
+    path = tmp_path / "cats.csv"
+    path.write_text(HEADER + "GES01,Krankmeldung,x,Xqzkrank,,,Gesundheit\nURL01,Urlaubsantrag,x,Xqzurlaub,,,Urlaub\n",
+                    encoding="utf-8")
+    sick_top = "Praxis Dr. Muster Ärztliche Bescheinigung über Arbeitsunfähigkeit Diagnose voraussichtliche Dauer"
+    leave_top = "Personalabteilung Antrag auf Erholungsurlaub Name Abteilung Vorgesetzter"
+    leave_body = "Urlaubstage Resturlaub Erholungsurlaub zur Genehmigung beantragt"
+    cats = load_categories(path).with_examples([
+        ("GES01", f"{sick_top} Bitte beim Arbeitgeber einreichen", sick_top),
+        ("URL01", f"{leave_top} {leave_body} {leave_body}", leave_top),
+    ])
+    lines = [(60, sick_top)] + [(y, leave_body) for y in range(330, 800, 30)]
+
+    result = run(page(lines), cats)
+
+    assert result.candidates[0].category_id == "GES01"
