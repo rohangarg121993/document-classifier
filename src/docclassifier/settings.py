@@ -30,7 +30,9 @@ class OcrSettings:
 
 @dataclass(frozen=True)
 class ClassifierSettings:
+    engine: str
     top_n: int
+    title_match_confidence: float
     synonym_reliability: float
     phrase_reliability: float
     similarity_reliability: float
@@ -74,6 +76,17 @@ class CacheSettings:
 
 
 @dataclass(frozen=True)
+class ContextSettings:
+    enabled: bool
+    model_dir: str
+    min_margin: float
+    confidence: float
+    phrase_weight: float
+    sibling_phrase_weight: float
+    negative_weight: float
+
+
+@dataclass(frozen=True)
 class FeedbackSettings:
     enabled: bool
     dir: str
@@ -86,6 +99,7 @@ class Settings:
     classifier: ClassifierSettings
     decision: DecisionSettings
     feedback: FeedbackSettings
+    context: ContextSettings
 
 
 _SECTIONS = {
@@ -94,6 +108,7 @@ _SECTIONS = {
     "classifier": ClassifierSettings,
     "decision": DecisionSettings,
     "feedback": FeedbackSettings,
+    "context": ContextSettings,
 }
 
 

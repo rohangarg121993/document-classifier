@@ -5,11 +5,14 @@ description = "Rule-based document page classifier: offline OCR plus keyword and
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "onnxruntime>=1.20",
     "pillow>=10",
     "pymupdf>=1.24",
     "pytesseract>=0.3.10",
     "rapidfuzz>=3",
     "scikit-learn>=1.4",
+    "snowballstemmer>=2.2",
+    "tokenizers>=0.20",
     "tomli>=2; python_version < '3.11'",
 ]
 
@@ -33,4 +36,5 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
     "tesseract: needs the Tesseract binary installed",
+    "encoder: needs the offline text encoder in models/ (docclassify fetch-model)",
 ]

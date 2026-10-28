@@ -32,8 +32,13 @@ enabled = true
 dir = ".cache/ocr"
 
 [classifier]
+# "evidence": keyword and similarity evidence over the whole page (ADR-0003).
+# "title_first": find the document's title and judge mainly on it (ADR-0005; being built).
+engine = "evidence"
 # How many candidate categories to report.
 top_n = 3
+# title_first: confidence when exactly one category's synonym names the page in its title.
+title_match_confidence = 0.9
 
 # Evidence model (ADR-0003). Each signal removes part of the remaining doubt:
 #   strength = 1 - (1 - synonym_reliability * synonym evidence)
@@ -107,3 +112,23 @@ handwriting_confidence_cap = 0.45
 # keep the directory local and git-ignored (ADR-0001).
 enabled = true
 dir = ".cache/feedback"
+
+[context]
+# title_first engine: when the title names no category, compare the page's meaning with each category's name,
+# description and positive phrases, using an offline sentence encoder (ADR-0005). Fetch it once with
+# `python docclassify.py fetch-model`; a relative directory is relative to the repository.
+enabled = true
+model_dir = "models/multilingual-e5-small"
+# Classify by meaning only when the best category leads the runner-up by at least this cosine margin.
+# On 50 benchmark pages: margin >= 0.02 was right 11 of 13 times; below it, right and wrong are mixed.
+min_margin = 0.02
+# Confidence reported for a page classified by meaning alone (a title match reports title_match_confidence).
+confidence = 0.6
+# Added to a category's meaning score at full positive-phrase evidence (phrase_cap distinct phrases, matched by
+# word stems); subtracted per negative-phrase hit. Cosines of different categories lie within ~0.05 of each
+# other, so one phrase (0.1 / 3) already outweighs a typical difference in meaning.
+phrase_weight = 0.1
+# The same, when choosing between the categories the title named (e.g. Kündigung by employee or employer):
+# the title fixed the topic, so meaning hardly differs and the categories' own phrases must decide.
+sibling_phrase_weight = 0.3
+negative_weight = 0.05

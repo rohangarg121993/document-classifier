@@ -13,7 +13,7 @@ class KeywordMatch:
     """A keyword found on the page. Holds the CSV keyword, never the page text (ADR-0001)."""
 
     keyword: str
-    kind: Literal["exact", "prefix", "fuzzy"]
+    kind: Literal["exact", "prefix", "fuzzy", "stem"]
     weight: float  # position factor × specificity × (1 for exact/prefix, fuzzy_weight for fuzzy)
     position: Literal["heading", "top", "middle", "bottom", "page"] = "page"  # "page": negatives, position-free
     size: float | None = None  # print size relative to the page's median word; ≥ heading_ratio means large print
@@ -47,6 +47,7 @@ class ClassificationResult:
     parent_confidence: float | None = None
     # Every category, best first. For API users and tests; not part of the JSON output.
     candidates_all: list[Candidate] = field(default_factory=list, repr=False)
+    title: str | None = None  # title_first: the line that names the document, as printed
 
     def to_dict(self) -> dict:
         data = asdict(self)

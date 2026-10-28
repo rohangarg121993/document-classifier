@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 from functools import lru_cache
 
+from docclassifier.classify import title_first
 from docclassifier.classify.categories import Category, CategorySet
 from docclassifier.classify.decision import decide
 from docclassifier.classify.matching import MatchRules, PageMatcher
@@ -35,6 +36,8 @@ POSITIONS = ("heading", "top", "middle", "bottom")
 
 def classify(page: PageText, categories: CategorySet, settings: Settings) -> ClassificationResult:
     cfg = settings.classifier
+    if cfg.engine == "title_first":
+        return title_first.classify(page, categories, settings)
     rules = MatchRules(cfg.min_prefix_length, cfg.min_fuzzy_length, cfg.fuzzy_threshold)
     texts = {name: normalize(text) for name, text in split_regions(page, cfg.heading_ratio).items()}
     page_matcher = PageMatcher(texts["full"], rules)
