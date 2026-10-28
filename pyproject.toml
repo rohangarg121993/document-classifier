@@ -9,7 +9,6 @@ dependencies = [
     "pillow>=10",
     "pymupdf>=1.24",
     "pytesseract>=0.3.10",
-    "rapidfuzz>=3",
     "scikit-learn>=1.4",
     "snowballstemmer>=2.2",
     "tokenizers>=0.20",

@@ -1,6 +1,6 @@
 # 0004: Learn from pages a person validated
 
-**Status:** Accepted (2026-10-28). Amends ADR-0002 ("TF-IDF is fitted on the category CSV only"; learning from labels "would need its own ADR").
+**Status:** Accepted (2026-10-28); learned examples amended by ADR-0005: a page that nearly repeats a validated one (cosine ≥ 0.85) takes its label directly. Amends ADR-0002 ("TF-IDF is fitted on the category CSV only"; learning from labels "would need its own ADR").
 
 ## Context
 

@@ -30,35 +30,15 @@ class OcrSettings:
 
 @dataclass(frozen=True)
 class ClassifierSettings:
-    engine: str
     top_n: int
+    heading_ratio: float
+    min_compound_length: int
     title_match_confidence: float
-    synonym_reliability: float
-    phrase_reliability: float
-    similarity_reliability: float
-    synonym_cap: float
     phrase_cap: float
-    similarity_full: float
     similarity_top_share: float
     similarity_top_min_words: int
-    negative_penalty: float
-    heading_ratio: float
-    synonym_position_heading: float
-    synonym_position_top: float
-    synonym_position_middle: float
-    synonym_position_bottom: float
-    phrase_position_heading: float
-    phrase_position_top: float
-    phrase_position_middle: float
-    phrase_position_bottom: float
-    min_prefix_length: int
-    min_fuzzy_length: int
-    fuzzy_threshold: float
-    fuzzy_weight: float
-    synonym_prefix_weight: float
-    example_reliability: float
-    example_similarity_floor: float
-    example_similarity_full: float
+    example_confidence: float
+    example_similarity: float
 
 
 @dataclass(frozen=True)

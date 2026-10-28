@@ -1,6 +1,6 @@
 # 0003: Combine evidence instead of averaging it
 
-**Status:** Accepted (2026-10-26). Replaces the region-split scoring of #6 and the confidence formula of #7.
+**Status:** Superseded by ADR-0005 (2026-10-28). Replaced the region-split scoring of #6 and the confidence formula of #7.
 
 ## Context
 

@@ -33,14 +33,6 @@ def test_umlauts_and_sharp_s_are_normalised(categories_csv):
     assert result.category_id == "GES01"
 
 
-def test_inflected_compound_matches_long_synonym(categories_csv):
-    # "abgemahnt" (9 characters) also matches at the start of "abgemahnten".
-    result = classify(page_of("die abgemahnten Kollegen"), load_categories(categories_csv), load_settings())
-
-    assert result.candidates[0].category_id == "DIS01"
-    assert [(m.keyword, m.kind) for m in result.candidates[0].matched_synonyms] == [("abgemahnt", "prefix")]
-
-
 def test_no_evidence_is_unclassified(categories_csv):
     result = classify(page_of("Speiseplan der Kantine"), load_categories(categories_csv), load_settings())
 

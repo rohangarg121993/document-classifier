@@ -6,6 +6,7 @@ elsewhere on the page ("…müssen Sie mit einer Kündigung rechnen") are mentio
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, replace
 from functools import lru_cache
@@ -17,6 +18,7 @@ from docclassifier.classify import context
 from docclassifier.classify.categories import CategorySet
 from docclassifier.classify.decision import with_fallback
 from docclassifier.classify.normalize import normalize
+from docclassifier.classify.regions import split_regions
 from docclassifier.classify.result import UNCLASSIFIED, Candidate, ClassificationResult, KeywordMatch
 from docclassifier.ocr.models import PageText, Word
 from docclassifier.settings import Settings
@@ -29,9 +31,13 @@ _FOOTER = re.compile(
     r"\b(iban|bic|hrb|hra|amtsgericht|registergericht|gesch[aä]ftsf[uü]hr|ust-?id|steuernummer|vorstand|aufsichtsrat)\b",
     re.IGNORECASE,
 )
+log = logging.getLogger(__name__)
+_DIGIT = re.compile(r"\d")
 _STEMMER = snowballstemmer.stemmer("german")
 # Shortest first part of a compound; shorter ones are prefixes (Ab-, Be-, Ver-, Ent-) that change the meaning.
 MIN_COMPOUND_PART = 4
+# A title in body print is told from running text by its length.
+MAX_TITLE_WORDS = 8
 
 
 @dataclass(frozen=True)
@@ -42,7 +48,14 @@ class Line:
 
 
 def classify(page: PageText, categories: CategorySet, settings: Settings) -> ClassificationResult:
-    return with_fallback(_classify(page, categories, settings), categories, settings.decision)
+    result = with_fallback(_classify(page, categories, settings), categories, settings.decision)
+    # IDs and scores only: page text, the title included, is personal data and must never reach the logs (ADR-0001).
+    log.info(
+        "page %s -> %s (%s, confidence %.3f; top: %s)",
+        page.page_number, result.category_id, result.reason or result.status, result.confidence,
+        ", ".join(f"{c.category_id}={c.score:.3f}" for c in result.candidates),
+    )
+    return result
 
 
 def _classify(page: PageText, categories: CategorySet, settings: Settings) -> ClassificationResult:
@@ -50,9 +63,11 @@ def _classify(page: PageText, categories: CategorySet, settings: Settings) -> Cl
     titles = title_candidates(page, settings.classifier.heading_ratio)
     if len(normalize(page.text).replace(" ", "")) < settings.decision.min_text_chars:
         return _unclassified("insufficient_text", [], titles[0] if titles else None)
+    if learned := _like_a_validated_page(page, categories, settings, titles[0] if titles else None):
+        return learned
     title, matches = (titles[0] if titles else None), {}
     for candidate in titles:
-        if found := _title_matches(candidate, categories, settings.classifier.min_prefix_length):
+        if found := _title_matches(candidate, categories, settings.classifier.min_compound_length):
             title, matches = candidate, found
             break
     candidates = [
@@ -69,7 +84,7 @@ def _classify(page: PageText, categories: CategorySet, settings: Settings) -> Cl
     if len(family) > 1 and settings.context.enabled:
         # The title names a kind of document; the body decides which one in that family: "Kündigung" by the
         # employee or the employer, "Arbeitsvertrag" fixed-term or not.
-        return _by_content(page, categories, settings, title, among=family)
+        return _by_content(page, categories, settings, title, among=family, named=matches)
     # Every category is ranked: the ones the title names first, the rest unscored in CSV order.
     ranked = candidates + [
         Candidate(category_id=c.category_id, category_name=c.name, parent_category=c.parent, score=0.0)
@@ -81,46 +96,84 @@ def _classify(page: PageText, categories: CategorySet, settings: Settings) -> Cl
     return _classified(ranked, settings.classifier.title_match_confidence, page, settings, title)
 
 
+def _like_a_validated_page(
+    page: PageText, categories: CategorySet, settings: Settings, title: str | None
+) -> ClassificationResult | None:
+    """The category of a validated page (ADR-0004) this page nearly repeats: the same form or letter, filled in
+    for another person. Letters are compared as written (character n-grams), the top of the page weighted more."""
+    cfg = settings.classifier
+    regions = split_regions(page, cfg.heading_ratio)
+    top_text = f"{regions['heading']} {regions['top']}"
+    share = cfg.similarity_top_share if len(top_text.split()) >= cfg.similarity_top_min_words else 0.0
+    full, top = categories.example_similarities(regions["full"], top_text)
+    similarities = [share * t + (1 - share) * f for f, t in zip(full, top)]
+    best = max(range(len(similarities)), key=similarities.__getitem__, default=None)
+    if best is None or similarities[best] < cfg.example_similarity:
+        return None
+    ranked = [
+        Candidate(
+            category_id=c.category_id, category_name=c.name, parent_category=c.parent,
+            score=round(similarity, 4), example_similarity=round(similarity, 4),
+        )
+        for c, similarity in sorted(zip(categories, similarities), key=lambda pair: -pair[1])
+    ]
+    return _classified(ranked, cfg.example_confidence, page, settings, title)
+
+
 def _by_content(
-    page: PageText, categories: CategorySet, settings: Settings, title: str | None, among: set[str] | None = None
+    page: PageText, categories: CategorySet, settings: Settings, title: str | None,
+    among: set[str] | None = None, named: dict[str, str] | None = None,
 ) -> ClassificationResult:
-    """No title names a category: judge the content, by meaning and by the category's own phrases.
+    """Judge the content, by meaning and by the category's own phrases.
 
     score = meaning (cosine to the category definition) + phrase_weight × positive-phrase evidence
             − negative_weight × negative-phrase hits.
     Phrases match by word stems, so "Einvernehmen" counts for "einvernehmlich". Decide only on a clear lead.
-    `among`: only these categories compete (the family the title named).
+    `among`: only these categories compete (the family the title named); the others are ranked after them.
+    `named`: category_id → synonym, the categories the title itself names.
     """
     cfg = settings.context
+    named = named or {}
     # Between siblings the title already settled the topic, so meaning barely differs; their phrases decide.
     phrase_weight = cfg.sibling_phrase_weight if among is not None else cfg.phrase_weight
     text = content(page, title)
     cosines = context.similarities(text, categories, cfg.model_dir)
-    stems = _stems(text)
-    ranked = []
+    stems, title_stems = _stems(text), _stems(title or "")
+    scored = []
     for category, cosine in zip(categories, cosines):
-        if among is not None and category.category_id not in among:
-            continue
         phrases = [p for p in category.positive_phrases if _contains(stems, _stems(p))]
         negatives = [p for p in category.negative_phrases if _contains(stems, _stems(p))]
         phrase_evidence = min(1.0, len(phrases) / settings.classifier.phrase_cap)
-        penalty = cfg.negative_weight * len(negatives)
-        ranked.append(Candidate(
+        # A negative phrase in the title itself rules the category out: an "Ermahnung" is not titled "Abmahnung".
+        excluded = any(_contains(title_stems, _stems(p)) for p in negatives)
+        penalty = 1.0 if excluded else cfg.negative_weight * len(negatives)
+        synonym = named.get(category.category_id)
+        scored.append(Candidate(
             category_id=category.category_id, category_name=category.name, parent_category=category.parent,
             score=round(cosine + phrase_weight * phrase_evidence - penalty, 4),
+            synonym_score=1.0 if synonym else 0.0,
             phrase_score=round(phrase_evidence, 4), similarity=round(cosine, 4), negative_penalty=round(penalty, 4),
+            matched_synonyms=[KeywordMatch(synonym, "exact", 1.0, "heading")] if synonym else [],
             matched_phrases=[KeywordMatch(p, "stem", 1.0) for p in phrases],
             matched_negatives=[KeywordMatch(p, "stem", 1.0) for p in negatives],
         ))
-    ranked.sort(key=lambda c: -c.score)
-    margin = ranked[0].score - ranked[1].score if len(ranked) > 1 else ranked[0].score
+    ranked = sorted(scored, key=lambda c: (among is not None and c.category_id not in among, -c.score))
+    competing = [c for c in ranked if among is None or c.category_id in among]
+    if len(named) == 1:
+        own = next(c for c in competing if c.category_id in named)
+        if competing[0].score - own.score < cfg.min_margin:
+            # The title names this category; a sibling overrules it only when the body clearly fits it better.
+            ranked.remove(own)
+            return _classified([own, *ranked], settings.classifier.title_match_confidence, page, settings, title)
+        return _classified(ranked, cfg.confidence, page, settings, title)
+    margin = competing[0].score - competing[1].score if len(competing) > 1 else competing[0].score
     if margin < cfg.min_margin:
         result = _unclassified("low_confidence", ranked, title, settings.classifier.top_n)
-        contenders = {c.parent_category for c in ranked if ranked[0].score - c.score < cfg.min_margin}
+        contenders = {c.parent_category for c in competing if competing[0].score - c.score < cfg.min_margin}
         if len(contenders) == 1:
             # Too close to call between siblings, but clearly that kind of document.
             return replace(
-                result, status="parent_only", parent_category=ranked[0].parent_category,
+                result, status="parent_only", parent_category=competing[0].parent_category,
                 parent_confidence=cfg.confidence,
             )
         return result
@@ -180,7 +233,9 @@ def title_candidates(page: PageText, heading_ratio: float) -> list[str]:
     1. a subject line marked "Betreff: …";
     2. (DIN 5008 letters) the line that leads into the salutation;
     3. lines in the upper half printed clearly larger than the text, tallest first (contracts, certificates;
-       a letterhead lands here too, which is why the caller takes the first candidate that names a category).
+       a letterhead lands here too, which is why the caller takes the first candidate that names a category);
+    4. short lines without digits in the top third, top to bottom: a title in bold at the text size looks like
+       this; a form's table rows carry amounts and numbers.
     """
     page_lines = lines(page)
     found = [_SUBJECT.sub("", line.text).strip() for line in page_lines if _SUBJECT.match(line.text)]
@@ -189,6 +244,9 @@ def title_candidates(page: PageText, heading_ratio: float) -> list[str]:
     if typical:
         large = [l for l in page_lines if l.y < page.height / 2 and l.height >= heading_ratio * typical]
         found += [l.text for l in sorted(large, key=lambda l: (-l.height, l.y))]
+    short = [l for l in page_lines if len(l.text.split()) <= MAX_TITLE_WORDS and not _DIGIT.search(l.text)]
+    found += [l.text for l in short if l.y < page.height / 3]
+    found += [l.text for l in short]
     return list(dict.fromkeys(found))
 
 

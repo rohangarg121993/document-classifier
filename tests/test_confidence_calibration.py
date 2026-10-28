@@ -8,9 +8,20 @@ import unicodedata
 import pytest
 
 from docclassifier import classify, load_categories, load_settings
+from docclassifier.ocr import PageText, Word
 
 from conftest import REAL_CATEGORIES
-from test_regions import page
+
+
+def page(lines):
+    """`lines` is a list of (y, text) in body print on an A4 page."""
+    words = []
+    for y, text in lines:
+        x = 72.0
+        for token in text.split():
+            words.append(Word(token, x, y - 6, x + 8 * len(token), y + 6))
+            x += 8 * len(token) + 4
+    return PageText("\n".join(text for _, text in lines), words, 595.0, 842.0, "native", 1)
 
 PAGES = {
     "warning letter": [
@@ -79,7 +90,7 @@ def test_clear_pages_are_confident(name, category, cats):
     result = run(name, cats)
 
     assert (result.status, result.category_id) == ("classified", category)
-    assert result.confidence >= 0.8
+    assert result.confidence >= load_settings().decision.threshold
 
 
 def test_page_with_taxonomy_overlap_is_classified_with_moderate_confidence(cats):
@@ -97,7 +108,7 @@ def test_sibling_tie_falls_back_to_parent(cats):
     assert result.status == "parent_only"
     assert result.parent_category == "Zeugnisse & Qualifikation"
     assert result.confidence < 0.1
-    assert result.parent_confidence >= 0.8
+    assert result.parent_confidence >= load_settings().decision.threshold
 
 
 def test_unrelated_page_is_unclassified(cats):

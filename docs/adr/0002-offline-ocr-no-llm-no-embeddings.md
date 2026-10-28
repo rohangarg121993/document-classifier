@@ -1,6 +1,6 @@
 # 0002: Offline OCR, rule-based classification, no LLM or embedding models
 
-**Status:** Accepted (2026-10-26)
+**Status:** Accepted (2026-10-26). The classification part is superseded by ADR-0005, which adds an offline sentence encoder; still no LLM and no training.
 
 ## Context
 

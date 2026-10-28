@@ -45,7 +45,7 @@ def selfcheck(categories: CategorySet, settings: Settings, min_confidence: float
         rank = [c.category_id for c in ranked].index(category.category_id) + 1
         best_other = next(c for c in ranked if c.category_id != category.category_id)
         # The confidence the classifier reports for this page, credited only if the category actually won.
-        confidence = _raw_confidence(ranked) if rank == 1 else 0.0
+        confidence = result.confidence if result.category_id == category.category_id else 0.0
         rows.append(
             {
                 "category_id": category.category_id,
@@ -66,11 +66,6 @@ def selfcheck(categories: CategorySet, settings: Settings, min_confidence: float
         "shared_synonyms": categories.warnings,
         "categories": rows,
     }
-
-
-def _raw_confidence(ranked) -> float:
-    top, second = ranked[0].score, ranked[1].score if len(ranked) > 1 else 0.0
-    return round(top * (1 - (1 - top) / (1 - second)), 4) if second < 1 else 0.0
 
 
 def format_report(report: dict) -> str:

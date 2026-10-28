@@ -15,6 +15,7 @@ from conftest import HEADER
 
 ROWS = [
     "DIS01,Abmahnungen,Schreiben das ein Fehlverhalten rügt,Abmahnung,Pflichtverletzung; Personalakte,Ermahnung,Disziplinar",
+    "DIS03,Ermahnungen,Hinweis an Mitarbeiter zur Einhaltung von Pflichten als Vorstufe zur Verwarnung,Ermahnung,ermahnen; Hinweis; künftig,Abmahnung,Disziplinar",
     "AUS05,Kündigung,Kündigung des Arbeitsverhältnisses durch den Arbeitgeber,Kündigung,kündigen wir; fristgerecht,,Austritt",
     "AUS04,MA Kuendigung,Kündigungsschreiben das vom Mitarbeiter ausgeht,Kündigung; Eigenkündigung,hiermit kündige ich; mein Arbeitsverhältnis,kündigen wir,Austritt",
     "VTR01,Befristeter Arbeitsvertrag,Arbeitsvertrag mit Befristung und Enddatum,befristeter Arbeitsvertrag,befristet; endet am; Sachgrund,unbestimmte Zeit,Vertrag",
@@ -47,8 +48,7 @@ def page(lines):
 
 
 def run(p, cats):
-    settings = load_settings()
-    return classify(p, cats, replace(settings, classifier=replace(settings.classifier, engine="title_first")))
+    return classify(p, cats, load_settings())
 
 
 def letter(subject, body):
@@ -234,8 +234,7 @@ def test_suspected_handwriting_sends_a_title_match_to_review(cats):
 def test_page_without_a_category_goes_to_the_fallback_category_when_one_is_set(cats):
     settings = load_settings()
     settings = replace(
-        settings, classifier=replace(settings.classifier, engine="title_first"),
-        decision=replace(settings.decision, fallback_category_id="ZUS07"),
+        settings, decision=replace(settings.decision, fallback_category_id="ZUS07"),
     )
 
     result = classify(page([(80, "Seite 2", 10)]), cats, settings)
@@ -251,3 +250,37 @@ def test_siblings_too_close_to_call_still_give_their_parent(cats):
     result = run(p, cats)
 
     assert (result.status, result.category_id, result.parent_category) == ("parent_only", "UNCLASSIFIED", "Austritt")
+
+
+def test_short_first_line_in_body_print_is_the_title(cats):
+    # Many PDFs set the title in bold at the text size: no large print, no subject line, no salutation.
+    p = page([(60, "Zwischenzeugnis", 10),
+              (100, "Frau Beispiel ist seit dem 1. April 2019 in unserem Unternehmen als Sachbearbeiterin tätig.", 10),
+              (114, "Ihre Leistung war stets einwandfrei; die Kündigungsfrist beträgt sechs Wochen.", 10)])
+
+    result = run(p, cats)
+
+    assert (result.status, result.category_id, result.title) == ("classified", "ZEU03", "Zwischenzeugnis")
+
+
+@pytest.mark.encoder
+def test_title_naming_one_category_wins_over_its_siblings_unless_the_body_clearly_differs(cats):
+    # The body reads like any disciplinary letter; nothing in it contradicts the title "Abmahnung".
+    p = letter("Betreff: Abmahnung", ["Sehr geehrter Herr Muster,",
+                                     "wir weisen Sie darauf hin, dass Sie die Arbeitszeiten künftig einzuhalten haben."])
+
+    result = run(p, cats)
+
+    assert (result.status, result.category_id) == ("classified", "DIS01")
+
+
+def test_form_field_with_an_amount_is_not_a_title(cats):
+    # A short table row near the top of a form names a cost type, not the document.
+    p = page([(60, "Dienstreise Hamburg – Kostenaufstellung", 10),
+              (90, "Rechnung Hotel 240,00", 10),
+              (104, "Bahnfahrt 2. Klasse 89,00", 10),
+              (300, "Bitte erstatten Sie den Gesamtbetrag auf mein Gehaltskonto; die Belege liegen bei.", 10)])
+
+    result = run(p, cats)
+
+    assert all(m.keyword != "Rechnung" for c in result.candidates_all for m in c.matched_synonyms)
