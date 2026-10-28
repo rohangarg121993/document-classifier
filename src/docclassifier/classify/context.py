@@ -12,12 +12,18 @@ from functools import lru_cache
 from pathlib import Path
 from weakref import WeakKeyDictionary
 
+import hashlib
+
 import numpy as np
 
 from docclassifier.classify.categories import CategorySet
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MAX_TOKENS = 512
+# The model ships in the repository as 40 MB parts (GitHub refuses files over 100 MB); a part missing or cut short
+# by a broken clone or copy fails this check instead of giving wrong vectors.
+MODEL_PARTS = "model_quantized.onnx.*"
+MODEL_SHA256 = "f80102d3f2a1229f387d3c81909990d8945513e347b0eab049f7de3c6f98c193"
 
 _category_vectors: WeakKeyDictionary[CategorySet, np.ndarray] = WeakKeyDictionary()
 
@@ -46,13 +52,9 @@ class _Encoder:
         import onnxruntime
         from tokenizers import Tokenizer
 
-        if not (model_dir / "model_quantized.onnx").exists():
-            raise FileNotFoundError(f"text encoder not found in {model_dir}; run: python docclassify.py fetch-model")
         self._tokenizer = Tokenizer.from_file(str(model_dir / "tokenizer.json"))
         self._tokenizer.enable_truncation(MAX_TOKENS)
-        self._session = onnxruntime.InferenceSession(
-            str(model_dir / "model_quantized.onnx"), providers=["CPUExecutionProvider"]
-        )
+        self._session = onnxruntime.InferenceSession(_model_bytes(model_dir), providers=["CPUExecutionProvider"])
         self._inputs = {i.name for i in self._session.get_inputs()}
 
     def embed(self, texts: list[str]) -> np.ndarray:
@@ -73,6 +75,16 @@ class _Encoder:
             pooled = (hidden * mask[..., None]).sum(axis=1) / mask.sum(axis=1, keepdims=True)
             rows.append(pooled / np.linalg.norm(pooled, axis=1, keepdims=True))
         return np.vstack(rows)
+
+
+def _model_bytes(model_dir: Path) -> bytes:
+    parts = sorted(model_dir.glob(MODEL_PARTS))
+    if not parts:
+        raise FileNotFoundError(f"text encoder not found in {model_dir} (expected {MODEL_PARTS})")
+    model = b"".join(part.read_bytes() for part in parts)
+    if hashlib.sha256(model).hexdigest() != MODEL_SHA256:
+        raise ValueError(f"text encoder in {model_dir} is incomplete or damaged; copy the model parts again")
+    return model
 
 
 @lru_cache(maxsize=2)

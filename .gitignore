@@ -20,9 +20,6 @@ review*.csv
 output/
 *.jsonl
 
-# Offline text encoder (ADR-0005): ~140 MB, fetched with `docclassify fetch-model`, never committed
-models/
-
 # --- Python ---
 __pycache__/
 *.py[cod]

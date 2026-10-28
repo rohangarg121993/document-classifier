@@ -53,8 +53,8 @@ def _tesseract_available() -> bool:
 def pytest_collection_modifyitems(config, items):
     missing = {
         "tesseract": None if _tesseract_available() else "Tesseract binary not installed",
-        "encoder": None if (REPO_ROOT / "models" / "multilingual-e5-small" / "model_quantized.onnx").exists()
-        else "text encoder not in models/ (run: python docclassify.py fetch-model)",
+        "encoder": None if any((REPO_ROOT / "models" / "multilingual-e5-small").glob("model_quantized.onnx.*"))
+        else "text encoder not in models/",
     }
     for marker, reason in missing.items():
         if reason:

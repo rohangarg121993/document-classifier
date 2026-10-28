@@ -1,0 +1,2 @@
+# Model files are byte-exact (SHA-256 checked): never convert line endings.
+models/** -text
