@@ -1,8 +1,8 @@
-# Taxonomy review: `categories.draft.csv`
+# Taxonomy cleanup of `config/categories.csv` (2026-10-28)
 
-Draft cleanup of `config/categories.csv` for business review. `config/categories.csv` is unchanged; the draft is
-`config/categories.draft.csv` (same columns, UTF-8 with BOM, comma-separated). Category IDs are kept; merged
-categories keep one ID. **144 → 134 categories.**
+What changed when the category CSV was cleaned for the title-first engine (ADR-0005), and the definitions that still
+need business input (section 3). Category IDs are kept; merged categories keep one ID, so label or review files
+that use a dropped ID (section 1) need mapping to the kept one. **144 → 134 categories.**
 
 How the fields are used by the title-first engine (`src/docclassifier/classify/title_first.py`):
 
@@ -34,7 +34,7 @@ combined description. Existing label or review files that use a dropped ID must 
 ## 2. Synonym changes per category
 
 Removed synonyms were generic words that, through compound matching, claimed unrelated titles. Examples
-(current → draft, checked with the engine's title matcher):
+(before → after, checked with the engine's title matcher):
 
 | Title | Current CSV | Draft |
 |---|---|---|
@@ -146,17 +146,17 @@ Full list. For merged categories, "Removed" is counted against the union of both
 
 ## 3. Placeholders needing business input
 
-The draft gives these categories working definitions so they can be classified, but the meaning has to be confirmed.
+These categories got working definitions so they can be classified, but the meaning has to be confirmed.
 
 | ID(s) | Question for the business |
 |---|---|
-| BAV07, BAV08, BAV09, BAV11 (P3) | What is "P3"? The draft assumes it is a company plan within the bAV (company pension), based on its parent group and phrases (Kontoauszug, Benennungsrecht = beneficiary, Umwandlungserklärung). The old descriptions ("P3-System oder Projekt", "eine Person für eine Position benennen") were guesses and were replaced. What do P3 documents' titles actually say? |
+| BAV07, BAV08, BAV09, BAV11 (P3) | What is "P3"? The CSV now assumes it is a company plan within the bAV (company pension), based on its parent group and phrases (Kontoauszug, Benennungsrecht = beneficiary, Umwandlungserklärung). The old descriptions ("P3-System oder Projekt", "eine Person für eine Position benennen") were guesses and were replaced. What do P3 documents' titles actually say? |
 | AZF02, AZF05, AZF09, AZF11 (LAKO) | Confirm that LAKO = Langzeitkonto / Lebensarbeitszeitkonto (Wertguthaben). The old AZF05/AZF11 descriptions said "Landesarbeitsgemeinschaft der kommunalen Arbeitgeber", which contradicted their own synonyms and phrases. Is the split into general account (AZF11), Freistellungsvereinbarung (AZF05), Freiphase checklist (AZF02) and Verzinsungsmodell (AZF09) how the documents arrive? |
 | AZF04 (ATZ) | The old description described generic part-time work. Rewritten as Altersteilzeit (Altersteilzeit agreement). Please confirm. |
 | BEU04 (FEF) | What does FEF stand for, and what do these documents look like (title, typical content)? "Förderprogramm" was removed as too generic; only "FEF" and "Führungskräfteentwicklung" remain. |
 | ENT07 (Altersverdienstsicherung) | The old description described pension provision. Rewritten as the collective-agreement earnings protection for older employees, which matches its phrases (Lebensjahr, Betriebszugehörigkeit, Ausgleichsbetrag). Which collective agreement applies, and is this correct? |
 | VPF02 (Obligation Letter Staatsangehörigkeit) | What is this letter for (e.g. export control / nationality declaration)? Who issues it, and what is its title? Left unchanged. |
-| ZEU05 (Abschlusszeugnis, Zeugnismanager) | The draft reads this as the company's own Ausbildungszeugnis (final certificate for its trainees and dual students). Or is it the company's own final Arbeitszeugnis (Endzeugnis) for leavers? That decides whether "Endzeugnis" belongs here or with ZEU01 (external). |
+| ZEU05 (Abschlusszeugnis, Zeugnismanager) | The CSV now reads this as the company's own Ausbildungszeugnis (final certificate for its trainees and dual students). Or is it the company's own final Arbeitszeugnis (Endzeugnis) for leavers? That decides whether "Endzeugnis" belongs here or with ZEU01 (external). |
 | ZEU01 (Arbeitszeugnisse extern) | "Extern" (issued by a previous employer) cannot be told from the text. Where should the company's own final Arbeitszeugnisse go? |
 | FAM03 / FAM06 (Care for Life) | Company programme: what do its documents' titles say? |
 | SON04 (Antwortschreiben) | "Stellungnahme" and "Antwort" were removed as too generic (e.g. a works council Stellungnahme). Should a Stellungnahme go here, or to the topic it answers? |
@@ -174,15 +174,7 @@ The draft gives these categories working definitions so they can be classified, 
 
 ## 5. Verification
 
-- `load_categories('config/categories.draft.csv')` loads 134 categories without errors.
-- Shared synonyms: 28 → 1 ("Kündigung", deliberately in AUS04 and AUS05; the body decides between them).
-- `selfcheck`, both files run on the same code snapshot (commit 72aef96 plus uncommitted title-first work in progress):
-
-| Engine | `categories.csv` | `categories.draft.csv` |
-|---|---|---|
-| title_first (current default) | 76/144 pass (68 failures) | 87/134 pass (47 failures) |
-| evidence | 132/144 pass (12 failures, all duplicate pairs) | 134/134 pass (0 failures) |
-
-On title_first, every category ranks first on its own page in both files. The failures come from the selfcheck
-confidence formula, which returns 0 when the runner-up scores ≥ 1. Title-first scores (cosine + phrase bonus) often
-exceed 1, so these failures are not collisions.
+- 134 categories load without errors; shared synonyms 28 → 1 ("Kündigung", deliberately in AUS04 and AUS05; the
+  body decides between them).
+- `selfcheck`: 134/134 categories recognise their own synthetic page (before: 141/144).
+- 50-page synthetic benchmark: 33 correct as before, confidently wrong 6 → 5, right answer in the top 3 for 42 → 45.

@@ -87,5 +87,5 @@ def test_synonym_shared_across_categories_warns(tmp_path):
 def test_real_taxonomy_loads_without_errors():
     categories = load_categories(REAL_CATEGORIES)
 
-    assert len(categories) == 144
-    assert categories.warnings  # known shared synonyms such as "Endzeugnis"
+    assert len(categories) == 134
+    assert categories.warnings  # "Kündigung" is shared on purpose: by the employee (AUS04) or the employer (AUS05)

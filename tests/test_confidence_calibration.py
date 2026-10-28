@@ -44,12 +44,12 @@ PAGES = {
         (700, "Mit freundlichen Grüßen, Personalabteilung"),
     ],
     "degree certificate": [
-        (60, "Urkunde"),
+        (60, "Masterurkunde"),
         (380, "Die Universität Musterstadt verleiht Frau Beispiel den akademischen Grad"),
         (410, "Master of Science nach bestandener Masterprüfung im Studiengang Informatik."),
         (700, "Musterstadt, den 30. September 2020  Der Präsident  Siegel"),
     ],
-    "sibling title only": [(60, "Endzeugnis"), (400, "Hiermit bestätigen wir die Angaben."), (700, "Personalabteilung")],
+    "sibling title only": [(60, "Kündigung"), (400, "Bitte beachten Sie die Anlage."), (700, "Personalabteilung")],
     # Permit-style page: no letter title, type label in normal print at the bottom, umlauts stored decomposed (NFD)
     # as some PDFs do.
     "residence permit": [
@@ -93,20 +93,19 @@ def test_clear_pages_are_confident(name, category, cats):
     assert result.confidence >= load_settings().decision.threshold
 
 
-def test_page_with_taxonomy_overlap_is_classified_with_moderate_confidence(cats):
-    # "Urkunde" is a synonym of both ZEU02 and URK08, so the runner-up is close.
+def test_specific_certificate_title_beats_the_generic_urkunde(cats):
+    # "Masterurkunde" ends in "Urkunde" (URK08, Sonstige Urkunden), but the longer name is the qualification.
     result = run("degree certificate", cats)
 
     assert (result.status, result.category_id) == ("classified", "ZEU02")
-    assert 0.5 <= result.confidence < 0.8
 
 
 def test_sibling_tie_falls_back_to_parent(cats):
-    # "Endzeugnis" is a synonym of ZEU01 and ZEU05 alike.
+    # "Kündigung" is a synonym of AUS04 (by the employee) and AUS05 (by the employer); the body doesn't say which.
     result = run("sibling title only", cats)
 
     assert result.status == "parent_only"
-    assert result.parent_category == "Zeugnisse & Qualifikation"
+    assert result.parent_category == "Austritt"
     assert result.confidence < 0.1
     assert result.parent_confidence >= load_settings().decision.threshold
 

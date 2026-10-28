@@ -32,7 +32,7 @@ _FOOTER = re.compile(
     re.IGNORECASE,
 )
 log = logging.getLogger(__name__)
-_DIGIT = re.compile(r"\d")
+_NUMBER = re.compile(r"\b\d")  # an amount, date or count; a code like "P3" is part of a name
 _STEMMER = snowballstemmer.stemmer("german")
 # Shortest first part of a compound; shorter ones are prefixes (Ab-, Be-, Ver-, Ent-) that change the meaning.
 MIN_COMPOUND_PART = 4
@@ -234,7 +234,7 @@ def title_candidates(page: PageText, heading_ratio: float) -> list[str]:
     2. (DIN 5008 letters) the line that leads into the salutation;
     3. lines in the upper half printed clearly larger than the text, tallest first (contracts, certificates;
        a letterhead lands here too, which is why the caller takes the first candidate that names a category);
-    4. short lines without digits in the top third, top to bottom: a title in bold at the text size looks like
+    4. short lines without numbers in the top third, top to bottom: a title in bold at the text size looks like
        this; a form's table rows carry amounts and numbers.
     """
     page_lines = lines(page)
@@ -244,7 +244,7 @@ def title_candidates(page: PageText, heading_ratio: float) -> list[str]:
     if typical:
         large = [l for l in page_lines if l.y < page.height / 2 and l.height >= heading_ratio * typical]
         found += [l.text for l in sorted(large, key=lambda l: (-l.height, l.y))]
-    short = [l for l in page_lines if len(l.text.split()) <= MAX_TITLE_WORDS and not _DIGIT.search(l.text)]
+    short = [l for l in page_lines if len(l.text.split()) <= MAX_TITLE_WORDS and not _NUMBER.search(l.text)]
     found += [l.text for l in short if l.y < page.height / 3]
     found += [l.text for l in short]
     return list(dict.fromkeys(found))

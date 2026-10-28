@@ -81,7 +81,7 @@ Title first, content second (ADR-0005):
 
 Too little text, suspected handwriting (confidence capped at 0.45) and the optional fallback category apply on top. Every result reports the `title` line that decided it. Every number is a setting in `default_settings.toml`.
 
-Because synonyms are matched against titles, they should be what documents of the category are *titled*; descriptions and phrases say what their body *says*. `docs/taxonomy-review.md` lists the changes proposed in `config/categories.draft.csv`.
+Because synonyms are matched against titles, they should be what documents of the category are *titled*; descriptions and phrases say what their body *says*. `docs/taxonomy-review.md` lists how `config/categories.csv` was cleaned for this (merged duplicates, title-style synonyms) and the definitions still waiting for business input.
 
 ## Tests
 

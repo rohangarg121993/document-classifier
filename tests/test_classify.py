@@ -61,6 +61,6 @@ def test_logs_never_contain_page_text(categories_csv, caplog):
 def test_real_taxonomy_loads():
     categories = load_categories(REAL_CATEGORIES)
 
-    assert len(categories) == 144
+    assert len(categories) == 134
     assert categories[0].category_id == "DIS01"
     assert "Abmahnung" in categories[0].synonyms

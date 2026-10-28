@@ -22,7 +22,7 @@ A person reads a page differently: they look at the title, and read the body onl
 
 ## Consequences
 
-- On the 50-page benchmark: 33 correct (was 15), 6 confidently wrong (was 8), right answer in the top 3 for 42. The benchmark is synthetic; real scans still need measuring with `evaluate`.
-- The synonyms column now means "how documents of this category are titled". Generic synonyms ("Bescheinigung", "Zeugnis") send titles to the wrong category, so the taxonomy matters more than before; `docs/taxonomy-review.md` proposes a cleaned CSV.
+- On the 50-page benchmark with the cleaned CSV: 33 correct (was 15), 5 confidently wrong (was 8), right answer in the top 3 for 45. The benchmark is synthetic; real scans still need measuring with `evaluate`.
+- The synonyms column now means "how documents of this category are titled". Generic synonyms ("Bescheinigung", "Zeugnis") send titles to the wrong category, so the taxonomy matters more than before. The CSV was cleaned accordingly (`docs/taxonomy-review.md`).
 - The repository grows by about 135 MB for the model. Installing needs `onnxruntime`, `tokenizers` and `snowballstemmer`, all with wheels for Windows and Python 3.10–3.13.
 - Page text still never leaves the machine, and logs carry IDs and scores only (ADR-0001).

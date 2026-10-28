@@ -284,3 +284,12 @@ def test_form_field_with_an_amount_is_not_a_title(cats):
     result = run(p, cats)
 
     assert all(m.keyword != "Rechnung" for c in result.candidates_all for m in c.matched_synonyms)
+
+
+def test_title_with_a_product_code_is_still_a_title(cats):
+    # "Z7" is a code, not an amount: the line is still the title.
+    p = page([(60, "Z7 Taxirechnung", 10),
+              (90, "Rechnung Fahrt", 10),
+              (300, "Fahrt vom Bahnhof zum Hotel am 03.03.2026, Betrag laut Beleg.", 10)])
+
+    assert run(p, cats).title == "Z7 Taxirechnung"

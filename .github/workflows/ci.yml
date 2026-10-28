@@ -29,7 +29,5 @@ jobs:
         run: python -m pytest -q
 
       - name: Taxonomy self-check
-        # Every category should recognise its own synthetic page with confidence >= 0.5. 3 categories currently
-        # fail (VPF01/VPF03 are duplicates, BAV07/BAV08 have placeholder definitions; see
-        # docs/taxonomy-review.md). The reviewed draft passes all; lower this when it replaces the CSV.
-        run: python docclassify.py selfcheck --categories config/categories.csv --max-failures 3
+        # Every category should recognise its own synthetic page with confidence >= 0.5.
+        run: python docclassify.py selfcheck --categories config/categories.csv --max-failures 0
